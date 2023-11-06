@@ -73,7 +73,8 @@ void mqtteer_get_unique_id(char *unique_id, char *name, char *device_name) {
   sprintf(unique_id, "%s_%s", device_name, name);
 }
 
-void mqtteer_send_discovery(struct mosquitto *mosq, char *name, char* device_name) {
+void mqtteer_send_discovery(struct mosquitto *mosq, char *name,
+                            char *device_name, char *device_class) {
   char unique_id[mqtteer_unique_id_len(name, device_name)];
   mqtteer_get_unique_id(unique_id, name, device_name);
   char state_topic[mqtteer_state_topic_len(name, device_name)];
@@ -88,6 +89,8 @@ void mqtteer_send_discovery(struct mosquitto *mosq, char *name, char* device_nam
   cJSON_AddStringToObject(discovery_obj, "state_topic", state_topic);
   cJSON_AddStringToObject(discovery_obj, "unique_id", unique_id);
   cJSON_AddStringToObject(discovery_obj, "value_template", "{{ value_json.new_value }}");
+  if (device_class != NULL)
+    cJSON_AddStringToObject(discovery_obj, "device_class", device_class);
   
   cJSON *device_obj = cJSON_CreateObject();
   cJSON_AddStringToObject(device_obj, "name", device_name);
@@ -138,12 +141,12 @@ int main(int argc, char *argv[]) {
   mosquitto_username_pw_set(mosq, mosq_username, mosq_password);
   mosquitto_connect(mosq, mosq_host, mosq_port, MOSQ_KEEPALIVE);
 
-  mqtteer_send_discovery(mosq, "uptime", mqtteer_device_name);
-  mqtteer_send_discovery(mosq, "load1", mqtteer_device_name);
-  mqtteer_send_discovery(mosq, "load5", mqtteer_device_name);
-  mqtteer_send_discovery(mosq, "load15", mqtteer_device_name);
-  mqtteer_send_discovery(mosq, "used_memory", mqtteer_device_name);
-  mqtteer_send_discovery(mosq, "total_memory", mqtteer_device_name);
+  mqtteer_send_discovery(mosq, "uptime", mqtteer_device_name, "duration");
+  mqtteer_send_discovery(mosq, "load1", mqtteer_device_name, "power_factor");
+  mqtteer_send_discovery(mosq, "load5", mqtteer_device_name, "power_factor");
+  mqtteer_send_discovery(mosq, "load15", mqtteer_device_name, "power_factor");
+  mqtteer_send_discovery(mosq, "used_memory", mqtteer_device_name, "data_size");
+  mqtteer_send_discovery(mosq, "total_memory", mqtteer_device_name, "data_size");
 
   procps_loadavg(&av1, &av5, &av15);
   procps_uptime(&uptime, NULL);
