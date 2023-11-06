@@ -112,7 +112,7 @@ void mqtteer_send_discovery(struct mosquitto *mosq, char *name,
 char * mqtteer_getenv(char *name) {
   char *value = getenv(name);
   if (value == NULL) {
-    printf("%s environment variable is not set", name);
+    fprintf(stderr, "%s environment variable is not set", name);
     exit(EXIT_FAILURE);
   }
   return value;
