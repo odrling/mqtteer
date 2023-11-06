@@ -8,4 +8,5 @@ example = executable(
     'mqtteer',
     'mqtteer.c',
     dependencies: [cjson, proc2, mosquitto],
+    install: true,
 )
