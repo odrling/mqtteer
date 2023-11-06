@@ -152,7 +152,11 @@ int main(int argc, char *argv[]) {
 
   procps_loadavg(&av1, &av5, &av15);
   procps_uptime(&uptime, NULL);
-  procps_meminfo_new(&meminfo);
+
+  if (procps_meminfo_new(&meminfo) < 0) {
+    fprintf(stderr, "failed to get memory info");
+    return EXIT_FAILURE;
+  }
   used = MEMINFO_GET(meminfo, MEMINFO_MEM_USED, ul_int);
   total = MEMINFO_GET(meminfo, MEMINFO_MEM_TOTAL, ul_int);
 
