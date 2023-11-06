@@ -120,11 +120,11 @@ char * mqtteer_getenv(char *name) {
 
 int main(int argc, char *argv[]) {
   struct mosquitto *mosq;
-  struct meminfo_info *meminfo;
+  struct meminfo_info *meminfo = NULL;
   int mosq_port;
   double uptime;
   double av1, av5, av15;
-  unsigned long used, total;
+  unsigned long used = 0, total = 0;
 
   char *mosq_username = mqtteer_getenv("MOSQ_USERNAME");
   char *mosq_password = mqtteer_getenv("MOSQ_PASSWORD");
