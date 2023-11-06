@@ -42,6 +42,7 @@ void mqtteer_send_ulong(struct mosquitto *mosq, char *name, char *device_name, u
 
   char *payload = cJSON_Print(json_payload);
   mqtteer_send(mosq, topic, payload);
+  free(payload);
 }
 
 void mqtteer_send_dbl(struct mosquitto *mosq, char *name, char *device_name, double payload_data) {
@@ -53,6 +54,7 @@ void mqtteer_send_dbl(struct mosquitto *mosq, char *name, char *device_name, dou
 
   char *payload = cJSON_Print(json_payload);
   mqtteer_send(mosq, topic, payload);
+  free(payload);
 }
 
 int mqtteer_discovery_topic_len(char *name, char* device_name) {
