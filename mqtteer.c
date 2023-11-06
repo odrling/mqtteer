@@ -11,7 +11,6 @@
 #include <unistd.h>
 
 #define MOSQ_KEEPALIVE 30
-#define PAYLOAD_MAX 16
 #define DISCOVERY_TOPIC_PREFIX "homeassistant"
 
 void mqtteer_send(struct mosquitto *mosq, char *topic, char* payload) {
@@ -35,22 +34,24 @@ void mqtteer_get_state_topic_name(char *state_topic, char *name, char *device_na
 }
 
 void mqtteer_send_ulong(struct mosquitto *mosq, char *name, char *device_name, unsigned long payload_data) {
-  char payload[PAYLOAD_MAX];
+  cJSON *json_payload = cJSON_CreateObject();
+  cJSON_AddNumberToObject(json_payload, "new_value", payload_data);
 
   char topic[mqtteer_state_topic_len(name, device_name)];
   mqtteer_get_state_topic_name(topic, name, device_name);
 
-  snprintf(payload, PAYLOAD_MAX, "%lu", payload_data);
+  char *payload = cJSON_Print(json_payload);
   mqtteer_send(mosq, topic, payload);
 }
 
 void mqtteer_send_dbl(struct mosquitto *mosq, char *name, char *device_name, double payload_data) {
-  char payload[PAYLOAD_MAX];
+  cJSON *json_payload = cJSON_CreateObject();
+  cJSON_AddNumberToObject(json_payload, "new_value", payload_data);
 
   char topic[mqtteer_state_topic_len(name, device_name)];
   mqtteer_get_state_topic_name(topic, name, device_name);
 
-  snprintf(payload, PAYLOAD_MAX, "%lf", payload_data);
+  char *payload = cJSON_Print(json_payload);
   mqtteer_send(mosq, topic, payload);
 }
 
@@ -86,6 +87,7 @@ void mqtteer_send_discovery(struct mosquitto *mosq, char *name, char* device_nam
   cJSON_AddStringToObject(discovery_obj, "name", name);
   cJSON_AddStringToObject(discovery_obj, "state_topic", state_topic);
   cJSON_AddStringToObject(discovery_obj, "unique_id", unique_id);
+  cJSON_AddStringToObject(discovery_obj, "value_template", "{{ value_json.new_value }}");
   
   cJSON *device_obj = cJSON_CreateObject();
   cJSON_AddStringToObject(device_obj, "name", device_name);
