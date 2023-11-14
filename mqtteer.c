@@ -129,7 +129,7 @@ void mqtteer_report_metrics(struct mosquitto *mosq) {
 
   if (procps_meminfo_new(&meminfo) < 0) {
     fprintf(stderr, "failed to get memory info");
-    exit(EXIT_FAILURE);
+    cleanup(mosq, EXIT_FAILURE);
   }
   used = MEMINFO_GET(meminfo, MEMINFO_MEM_USED, ul_int);
   total = MEMINFO_GET(meminfo, MEMINFO_MEM_TOTAL, ul_int);
