@@ -13,6 +13,14 @@
 #define MOSQ_KEEPALIVE 30
 #define DISCOVERY_TOPIC_PREFIX "homeassistant"
 
+static char *mqtteer_device_name;
+
+void cleanup(struct mosquitto *mosq, int exit_code) {
+  mosquitto_destroy(mosq);
+  mosquitto_lib_cleanup();
+  exit(exit_code);
+}
+
 void mqtteer_send(struct mosquitto *mosq, char *topic, char* payload) {
   int payload_len;
   int ret;
@@ -118,13 +126,44 @@ char * mqtteer_getenv(char *name) {
   return value;
 }
 
-int main(int argc, char *argv[]) {
-  struct mosquitto *mosq;
+void mqtteer_announce_topics(struct mosquitto *mosq) {
+    printf("sending discovery message\n");
+
+    mqtteer_send_discovery(mosq, "uptime", mqtteer_device_name, "duration");
+    mqtteer_send_discovery(mosq, "load1", mqtteer_device_name, "power_factor");
+    mqtteer_send_discovery(mosq, "load5", mqtteer_device_name, "power_factor");
+    mqtteer_send_discovery(mosq, "load15", mqtteer_device_name, "power_factor");
+    mqtteer_send_discovery(mosq, "used_memory", mqtteer_device_name, "data_size");
+    mqtteer_send_discovery(mosq, "total_memory", mqtteer_device_name, "data_size");
+}
+
+void mqtteer_report_metrics(struct mosquitto *mosq) {
   struct meminfo_info *meminfo = NULL;
-  int mosq_port;
   double uptime;
   double av1, av5, av15;
-  unsigned long used = 0, total = 0;
+  unsigned long used, total;
+
+  procps_loadavg(&av1, &av5, &av15);
+  procps_uptime(&uptime, NULL);
+
+  if (procps_meminfo_new(&meminfo) < 0) {
+    fprintf(stderr, "failed to get memory info");
+    exit(EXIT_FAILURE);
+  }
+  used = MEMINFO_GET(meminfo, MEMINFO_MEM_USED, ul_int);
+  total = MEMINFO_GET(meminfo, MEMINFO_MEM_TOTAL, ul_int);
+
+  mqtteer_send_dbl(mosq, "uptime", mqtteer_device_name, uptime);
+  mqtteer_send_dbl(mosq, "load1", mqtteer_device_name, av1);
+  mqtteer_send_dbl(mosq, "load5", mqtteer_device_name, av5);
+  mqtteer_send_dbl(mosq, "load15", mqtteer_device_name, av15);
+  mqtteer_send_ulong(mosq, "used_memory", mqtteer_device_name, used);
+  mqtteer_send_ulong(mosq, "total_memory", mqtteer_device_name, total);
+}
+
+int main(int argc, char *argv[]) {
+  struct mosquitto *mosq;
+  int mosq_port;
 
   char *mosq_username = mqtteer_getenv("MQTTEER_USERNAME");
   char *mosq_password = mqtteer_getenv("MQTTEER_PASSWORD");
@@ -136,38 +175,18 @@ int main(int argc, char *argv[]) {
   else
     mosq_port = atoi(mosq_port_str);
 
-  char *mqtteer_device_name = mqtteer_getenv("MQTTEER_DEVICE_NAME");
+  mqtteer_device_name = mqtteer_getenv("MQTTEER_DEVICE_NAME");
 
   mosquitto_lib_init();
   mosq = mosquitto_new(NULL, true, NULL);
   mosquitto_username_pw_set(mosq, mosq_username, mosq_password);
   mosquitto_connect(mosq, mosq_host, mosq_port, MOSQ_KEEPALIVE);
 
-  mqtteer_send_discovery(mosq, "uptime", mqtteer_device_name, "duration");
-  mqtteer_send_discovery(mosq, "load1", mqtteer_device_name, "power_factor");
-  mqtteer_send_discovery(mosq, "load5", mqtteer_device_name, "power_factor");
-  mqtteer_send_discovery(mosq, "load15", mqtteer_device_name, "power_factor");
-  mqtteer_send_discovery(mosq, "used_memory", mqtteer_device_name, "data_size");
-  mqtteer_send_discovery(mosq, "total_memory", mqtteer_device_name, "data_size");
-
-  procps_loadavg(&av1, &av5, &av15);
-  procps_uptime(&uptime, NULL);
-
-  if (procps_meminfo_new(&meminfo) < 0) {
-    fprintf(stderr, "failed to get memory info");
-    return EXIT_FAILURE;
+  if (argc > 1 && strcmp(argv[1], "announce") == 0) {
+    mqtteer_announce_topics(mosq);
+  } else {
+    mqtteer_report_metrics(mosq);
   }
-  used = MEMINFO_GET(meminfo, MEMINFO_MEM_USED, ul_int);
-  total = MEMINFO_GET(meminfo, MEMINFO_MEM_TOTAL, ul_int);
 
-  mqtteer_send_dbl(mosq, "uptime", mqtteer_device_name, uptime);
-  mqtteer_send_dbl(mosq, "load1", mqtteer_device_name, av1);
-  mqtteer_send_dbl(mosq, "load5", mqtteer_device_name, av5);
-  mqtteer_send_dbl(mosq, "load15", mqtteer_device_name, av15);
-  mqtteer_send_ulong(mosq, "used_memory", mqtteer_device_name, used);
-  mqtteer_send_ulong(mosq, "total_memory", mqtteer_device_name, total);
-
-  mosquitto_destroy(mosq);
-  mosquitto_lib_cleanup();
-  return EXIT_SUCCESS;
+  cleanup(mosq, EXIT_SUCCESS);
 }
