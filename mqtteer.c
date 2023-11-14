@@ -126,10 +126,10 @@ int main(int argc, char *argv[]) {
   double av1, av5, av15;
   unsigned long used = 0, total = 0;
 
-  char *mosq_username = mqtteer_getenv("MOSQ_USERNAME");
-  char *mosq_password = mqtteer_getenv("MOSQ_PASSWORD");
-  char *mosq_host = mqtteer_getenv("MOSQ_HOST");
-  char *mosq_port_str = getenv("MOSQ_PORT");
+  char *mosq_username = mqtteer_getenv("MQTTEER_USERNAME");
+  char *mosq_password = mqtteer_getenv("MQTTEER_PASSWORD");
+  char *mosq_host = mqtteer_getenv("MQTTEER_HOST");
+  char *mosq_port_str = getenv("MQTTEER_PORT");
 
   if (mosq_port_str == NULL)
     mosq_port = 1883;
