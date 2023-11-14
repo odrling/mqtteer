@@ -61,7 +61,8 @@ void mqtteer_get_unique_id(char *unique_id, char *name, char *device_name) {
   sprintf(unique_id, "%s_%s", device_name, name);
 }
 
-void mqtteer_send_discovery(struct mosquitto *mosq, char *name, char *device_class) {
+void mqtteer_send_discovery(struct mosquitto *mosq, char *name,
+                            char *device_class, char *unit_of_measurement) {
   char unique_id[mqtteer_unique_id_len(name, mqtteer_device_name)];
   mqtteer_get_unique_id(unique_id, name, mqtteer_device_name);
   char state_topic[mqtteer_state_topic_len()];
@@ -80,8 +81,11 @@ void mqtteer_send_discovery(struct mosquitto *mosq, char *name, char *device_cla
   char template_str[strlen(name) + strlen(TEMPLATE_STR_FORMAT) - 1];
   sprintf(template_str, TEMPLATE_STR_FORMAT, name);
   cJSON_AddStringToObject(discovery_obj, "value_template", template_str);
+
   if (device_class != NULL)
     cJSON_AddStringToObject(discovery_obj, "device_class", device_class);
+  if (unit_of_measurement != NULL)
+    cJSON_AddStringToObject(discovery_obj, "unit_of_measurement", unit_of_measurement);
 
   cJSON *device_obj = cJSON_CreateObject();
   cJSON_AddStringToObject(device_obj, "name", mqtteer_device_name);
@@ -111,12 +115,12 @@ char * mqtteer_getenv(char *name) {
 void mqtteer_announce_topics(struct mosquitto *mosq) {
     printf("announcing this device\n");
 
-    mqtteer_send_discovery(mosq, "uptime", "duration");
-    mqtteer_send_discovery(mosq, "load1", "power_factor");
-    mqtteer_send_discovery(mosq, "load5", "power_factor");
-    mqtteer_send_discovery(mosq, "load15", "power_factor");
-    mqtteer_send_discovery(mosq, "used_memory", "data_size");
-    mqtteer_send_discovery(mosq, "total_memory", "data_size");
+    mqtteer_send_discovery(mosq, "uptime", "duration", "s");
+    mqtteer_send_discovery(mosq, "load1", "power_factor", NULL);
+    mqtteer_send_discovery(mosq, "load5", "power_factor", NULL);
+    mqtteer_send_discovery(mosq, "load15", "power_factor", NULL);
+    mqtteer_send_discovery(mosq, "used_memory", "data_size", "kB");
+    mqtteer_send_discovery(mosq, "total_memory", "data_size", "kB");
 }
 
 void mqtteer_report_metrics(struct mosquitto *mosq) {
