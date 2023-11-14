@@ -31,48 +31,48 @@ void mqtteer_send(struct mosquitto *mosq, char *topic, char* payload) {
     fprintf(stderr, "error %d", ret);
 }
 
-int mqtteer_state_topic_len(char *name, char* device_name) {
-  return strlen(name) + strlen(device_name)
+int mqtteer_state_topic_len(char *name) {
+  return strlen(name) + strlen(mqtteer_device_name)
        + strlen(DISCOVERY_TOPIC_PREFIX "/sensor///state") + 1;
 }
 
-void mqtteer_get_state_topic_name(char *state_topic, char *name, char *device_name) {
+void mqtteer_get_state_topic_name(char *state_topic, char *name) {
   sprintf(state_topic, DISCOVERY_TOPIC_PREFIX "/sensor/%s/%s/state",
-          device_name, name);
+          mqtteer_device_name, name);
 }
 
-void mqtteer_send_ulong(struct mosquitto *mosq, char *name, char *device_name, unsigned long payload_data) {
+void mqtteer_send_ulong(struct mosquitto *mosq, char *name, unsigned long payload_data) {
   cJSON *json_payload = cJSON_CreateObject();
   cJSON_AddNumberToObject(json_payload, "new_value", payload_data);
 
-  char topic[mqtteer_state_topic_len(name, device_name)];
-  mqtteer_get_state_topic_name(topic, name, device_name);
+  char topic[mqtteer_state_topic_len(name)];
+  mqtteer_get_state_topic_name(topic, name);
 
   char *payload = cJSON_Print(json_payload);
   mqtteer_send(mosq, topic, payload);
   free(payload);
 }
 
-void mqtteer_send_dbl(struct mosquitto *mosq, char *name, char *device_name, double payload_data) {
+void mqtteer_send_dbl(struct mosquitto *mosq, char *name, double payload_data) {
   cJSON *json_payload = cJSON_CreateObject();
   cJSON_AddNumberToObject(json_payload, "new_value", payload_data);
 
-  char topic[mqtteer_state_topic_len(name, device_name)];
-  mqtteer_get_state_topic_name(topic, name, device_name);
+  char topic[mqtteer_state_topic_len(name)];
+  mqtteer_get_state_topic_name(topic, name);
 
   char *payload = cJSON_Print(json_payload);
   mqtteer_send(mosq, topic, payload);
   free(payload);
 }
 
-int mqtteer_discovery_topic_len(char *name, char* device_name) {
-  return strlen(name) + strlen(device_name)
+int mqtteer_discovery_topic_len(char *name) {
+  return strlen(name) + strlen(mqtteer_device_name)
        + strlen(DISCOVERY_TOPIC_PREFIX "/sensor///config") + 1;
 }
 
-void mqtteer_get_discovery_topic_name(char *state_topic, char *name, char *device_name) {
+void mqtteer_get_discovery_topic_name(char *state_topic, char *name) {
   sprintf(state_topic, DISCOVERY_TOPIC_PREFIX "/sensor/%s/%s/config",
-          device_name, name);
+          mqtteer_device_name, name);
 }
 
 int mqtteer_unique_id_len(char *name, char *device_name) {
@@ -83,15 +83,14 @@ void mqtteer_get_unique_id(char *unique_id, char *name, char *device_name) {
   sprintf(unique_id, "%s_%s", device_name, name);
 }
 
-void mqtteer_send_discovery(struct mosquitto *mosq, char *name,
-                            char *device_name, char *device_class) {
-  char unique_id[mqtteer_unique_id_len(name, device_name)];
-  mqtteer_get_unique_id(unique_id, name, device_name);
-  char state_topic[mqtteer_state_topic_len(name, device_name)];
-  mqtteer_get_state_topic_name(state_topic, name, device_name);
+void mqtteer_send_discovery(struct mosquitto *mosq, char *name, char *device_class) {
+  char unique_id[mqtteer_unique_id_len(name, mqtteer_device_name)];
+  mqtteer_get_unique_id(unique_id, name, mqtteer_device_name);
+  char state_topic[mqtteer_state_topic_len(name)];
+  mqtteer_get_state_topic_name(state_topic, name);
 
-  char discovery_topic[mqtteer_discovery_topic_len(name, device_name)];
-  mqtteer_get_discovery_topic_name(discovery_topic, name, device_name);
+  char discovery_topic[mqtteer_discovery_topic_len(name)];
+  mqtteer_get_discovery_topic_name(discovery_topic, name);
 
   cJSON *discovery_obj = cJSON_CreateObject();
 
@@ -103,10 +102,10 @@ void mqtteer_send_discovery(struct mosquitto *mosq, char *name,
     cJSON_AddStringToObject(discovery_obj, "device_class", device_class);
   
   cJSON *device_obj = cJSON_CreateObject();
-  cJSON_AddStringToObject(device_obj, "name", device_name);
+  cJSON_AddStringToObject(device_obj, "name", mqtteer_device_name);
 
   cJSON *identifiers_arr = cJSON_CreateArray();
-  cJSON_AddItemToArray(identifiers_arr, cJSON_CreateString(device_name));
+  cJSON_AddItemToArray(identifiers_arr, cJSON_CreateString(mqtteer_device_name));
 
   cJSON_AddItemToObject(device_obj, "identifiers", identifiers_arr);
   cJSON_AddItemToObject(discovery_obj, "device", device_obj);
@@ -127,14 +126,14 @@ char * mqtteer_getenv(char *name) {
 }
 
 void mqtteer_announce_topics(struct mosquitto *mosq) {
-    printf("sending discovery message\n");
+    printf("announcing this device\n");
 
-    mqtteer_send_discovery(mosq, "uptime", mqtteer_device_name, "duration");
-    mqtteer_send_discovery(mosq, "load1", mqtteer_device_name, "power_factor");
-    mqtteer_send_discovery(mosq, "load5", mqtteer_device_name, "power_factor");
-    mqtteer_send_discovery(mosq, "load15", mqtteer_device_name, "power_factor");
-    mqtteer_send_discovery(mosq, "used_memory", mqtteer_device_name, "data_size");
-    mqtteer_send_discovery(mosq, "total_memory", mqtteer_device_name, "data_size");
+    mqtteer_send_discovery(mosq, "uptime", "duration");
+    mqtteer_send_discovery(mosq, "load1", "power_factor");
+    mqtteer_send_discovery(mosq, "load5", "power_factor");
+    mqtteer_send_discovery(mosq, "load15", "power_factor");
+    mqtteer_send_discovery(mosq, "used_memory", "data_size");
+    mqtteer_send_discovery(mosq, "total_memory", "data_size");
 }
 
 void mqtteer_report_metrics(struct mosquitto *mosq) {
@@ -153,12 +152,12 @@ void mqtteer_report_metrics(struct mosquitto *mosq) {
   used = MEMINFO_GET(meminfo, MEMINFO_MEM_USED, ul_int);
   total = MEMINFO_GET(meminfo, MEMINFO_MEM_TOTAL, ul_int);
 
-  mqtteer_send_dbl(mosq, "uptime", mqtteer_device_name, uptime);
-  mqtteer_send_dbl(mosq, "load1", mqtteer_device_name, av1);
-  mqtteer_send_dbl(mosq, "load5", mqtteer_device_name, av5);
-  mqtteer_send_dbl(mosq, "load15", mqtteer_device_name, av15);
-  mqtteer_send_ulong(mosq, "used_memory", mqtteer_device_name, used);
-  mqtteer_send_ulong(mosq, "total_memory", mqtteer_device_name, total);
+  mqtteer_send_dbl(mosq, "uptime", uptime);
+  mqtteer_send_dbl(mosq, "load1", av1);
+  mqtteer_send_dbl(mosq, "load5", av5);
+  mqtteer_send_dbl(mosq, "load15", av15);
+  mqtteer_send_ulong(mosq, "used_memory", used);
+  mqtteer_send_ulong(mosq, "total_memory", total);
 }
 
 int main(int argc, char *argv[]) {
