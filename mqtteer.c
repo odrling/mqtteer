@@ -27,8 +27,10 @@ void mqtteer_send(struct mosquitto *mosq, char *topic, char* payload) {
 
   payload_len = strlen(payload);
   ret = mosquitto_publish(mosq, NULL, topic, payload_len, payload, 0, false);
-  if (ret != MOSQ_ERR_SUCCESS)
+  if (ret != MOSQ_ERR_SUCCESS) {
     fprintf(stderr, "error %d", ret);
+    cleanup(mosq, EXIT_FAILURE);
+  }
 }
 
 int mqtteer_state_topic_len() {
