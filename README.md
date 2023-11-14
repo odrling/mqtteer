@@ -17,11 +17,12 @@ uptime of the computer it is running on.
 
 It uses the following environment variables to configure itself:
 
-* MOSQ_HOST: MQTT host to connect to
-* MOSQ_PORT: port to connect to on the host (defaults to 1883)
-* MOSQ_USERNAME: MQTT username of the client
-* MOSQ_PASSWORD: MQTT password of the client
+* MQTTEER_HOST: MQTT host to connect to
+* MQTTEER_PORT: port to connect to on the host (defaults to 1883)
+* MQTTEER_USERNAME: MQTT username of the client
+* MQTTEER_PASSWORD: MQTT password of the client
 * MQTTEER_DEVICE_NAME: name that this device will have in Home Assistant
 
-Currently, the values sent on the first run of mqtteer might not get registered
-in Home Assistant.
+You must run `mqtteer announce` once with to announce the device to Home
+Assistant. You should run it again when updating mqtteer as the format of
+mqtteer's message could have changed.
