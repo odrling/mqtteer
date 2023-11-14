@@ -100,7 +100,7 @@ void mqtteer_send_discovery(struct mosquitto *mosq, char *name,
   mqtteer_send(mosq, discovery_topic, discovery_payload);
 
   free(discovery_payload);
-  free(discovery_obj);
+  cJSON_Delete(discovery_obj);
 }
 
 char * mqtteer_getenv(char *name) {
@@ -153,7 +153,7 @@ void mqtteer_report_metrics(struct mosquitto *mosq) {
   mqtteer_get_state_topic_name(state_topic);
   mqtteer_send(mosq, state_topic, payload);
   free(payload);
-  free(state_obj);
+  cJSON_Delete(state_obj);
 }
 
 int main(int argc, char *argv[]) {
