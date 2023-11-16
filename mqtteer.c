@@ -164,11 +164,17 @@ int main(int argc, char *argv[]) {
   char *mosq_password = mqtteer_getenv("MQTTEER_PASSWORD");
   char *mosq_host = mqtteer_getenv("MQTTEER_HOST");
   char *mosq_port_str = getenv("MQTTEER_PORT");
+  char *port_endptr;
 
   if (mosq_port_str == NULL)
     mosq_port = 1883;
-  else
-    mosq_port = atoi(mosq_port_str);
+  else {
+    mosq_port = strtol(mosq_port_str, &port_endptr, 10);
+    if (mosq_port_str == port_endptr || mosq_port == 0) {
+      fprintf(stderr, "MQTTEER_PORT is invalid: %s", mosq_port_str);
+      exit(EXIT_FAILURE);
+    }
+  }
 
   mqtteer_device_name = mqtteer_getenv("MQTTEER_DEVICE_NAME");
 
