@@ -153,6 +153,7 @@ void mqtteer_report_metrics(struct mosquitto *mosq) {
   mqtteer_get_state_topic_name(state_topic);
   mqtteer_send(mosq, state_topic, payload);
   free(payload);
+  procps_meminfo_unref(&meminfo);
   cJSON_Delete(state_obj);
 }
 
