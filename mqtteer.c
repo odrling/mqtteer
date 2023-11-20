@@ -140,6 +140,7 @@ void mqtteer_report_metrics() {
   }
   used = MEMINFO_GET(meminfo, MEMINFO_MEM_USED, ul_int);
   total = MEMINFO_GET(meminfo, MEMINFO_MEM_TOTAL, ul_int);
+  procps_meminfo_unref(&meminfo);
 
   cJSON *state_obj = cJSON_CreateObject();
   cJSON_AddNumberToObject(state_obj, "uptime", uptime);
@@ -154,7 +155,6 @@ void mqtteer_report_metrics() {
   mqtteer_get_state_topic_name(state_topic);
   mqtteer_send(state_topic, payload);
   free(payload);
-  procps_meminfo_unref(&meminfo);
   cJSON_Delete(state_obj);
 }
 
