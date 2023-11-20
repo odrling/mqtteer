@@ -14,14 +14,16 @@
 #define DISCOVERY_TOPIC_PREFIX "homeassistant"
 
 static char *mqtteer_device_name;
+static struct mosquitto *mosq;
 
-void cleanup(struct mosquitto *mosq, int exit_code) {
-  mosquitto_destroy(mosq);
+void cleanup(void) {
+  if (mosq != NULL)
+    mosquitto_destroy(mosq);
+
   mosquitto_lib_cleanup();
-  exit(exit_code);
 }
 
-void mqtteer_send(struct mosquitto *mosq, char *topic, char* payload) {
+void mqtteer_send(char *topic, char* payload) {
   int payload_len;
   int ret;
 
@@ -29,7 +31,7 @@ void mqtteer_send(struct mosquitto *mosq, char *topic, char* payload) {
   ret = mosquitto_publish(mosq, NULL, topic, payload_len, payload, 0, false);
   if (ret != MOSQ_ERR_SUCCESS) {
     fprintf(stderr, "error %d", ret);
-    cleanup(mosq, EXIT_FAILURE);
+    exit(EXIT_FAILURE);
   }
 }
 
@@ -61,8 +63,7 @@ void mqtteer_get_unique_id(char *unique_id, char *name, char *device_name) {
   sprintf(unique_id, "%s_%s", device_name, name);
 }
 
-void mqtteer_send_discovery(struct mosquitto *mosq, char *name,
-                            char *device_class, char *unit_of_measurement) {
+void mqtteer_send_discovery(char *name, char *device_class, char *unit_of_measurement) {
   char unique_id[mqtteer_unique_id_len(name, mqtteer_device_name)];
   mqtteer_get_unique_id(unique_id, name, mqtteer_device_name);
   char state_topic[mqtteer_state_topic_len()];
@@ -97,7 +98,7 @@ void mqtteer_send_discovery(struct mosquitto *mosq, char *name,
   cJSON_AddItemToObject(discovery_obj, "device", device_obj);
 
   char *discovery_payload = cJSON_Print(discovery_obj);
-  mqtteer_send(mosq, discovery_topic, discovery_payload);
+  mqtteer_send(discovery_topic, discovery_payload);
 
   free(discovery_payload);
   cJSON_Delete(discovery_obj);
@@ -112,18 +113,18 @@ char * mqtteer_getenv(char *name) {
   return value;
 }
 
-void mqtteer_announce_topics(struct mosquitto *mosq) {
+void mqtteer_announce_topics() {
     printf("announcing this device\n");
 
-    mqtteer_send_discovery(mosq, "uptime", "duration", "s");
-    mqtteer_send_discovery(mosq, "load1", "power_factor", NULL);
-    mqtteer_send_discovery(mosq, "load5", "power_factor", NULL);
-    mqtteer_send_discovery(mosq, "load15", "power_factor", NULL);
-    mqtteer_send_discovery(mosq, "used_memory", "data_size", "kB");
-    mqtteer_send_discovery(mosq, "total_memory", "data_size", "kB");
+    mqtteer_send_discovery("uptime", "duration", "s");
+    mqtteer_send_discovery("load1", "power_factor", NULL);
+    mqtteer_send_discovery("load5", "power_factor", NULL);
+    mqtteer_send_discovery("load15", "power_factor", NULL);
+    mqtteer_send_discovery("used_memory", "data_size", "kB");
+    mqtteer_send_discovery("total_memory", "data_size", "kB");
 }
 
-void mqtteer_report_metrics(struct mosquitto *mosq) {
+void mqtteer_report_metrics() {
   struct meminfo_info *meminfo = NULL;
   double uptime;
   double av1, av5, av15;
@@ -135,7 +136,7 @@ void mqtteer_report_metrics(struct mosquitto *mosq) {
 
   if (procps_meminfo_new(&meminfo) < 0) {
     fprintf(stderr, "failed to get memory info");
-    cleanup(mosq, EXIT_FAILURE);
+    exit(EXIT_FAILURE);
   }
   used = MEMINFO_GET(meminfo, MEMINFO_MEM_USED, ul_int);
   total = MEMINFO_GET(meminfo, MEMINFO_MEM_TOTAL, ul_int);
@@ -151,14 +152,13 @@ void mqtteer_report_metrics(struct mosquitto *mosq) {
   char *payload = cJSON_Print(state_obj);
 
   mqtteer_get_state_topic_name(state_topic);
-  mqtteer_send(mosq, state_topic, payload);
+  mqtteer_send(state_topic, payload);
   free(payload);
   procps_meminfo_unref(&meminfo);
   cJSON_Delete(state_obj);
 }
 
 int main(int argc, char *argv[]) {
-  struct mosquitto *mosq;
   int mosq_port;
 
   char *mosq_username = mqtteer_getenv("MQTTEER_USERNAME");
@@ -180,15 +180,16 @@ int main(int argc, char *argv[]) {
   mqtteer_device_name = mqtteer_getenv("MQTTEER_DEVICE_NAME");
 
   mosquitto_lib_init();
+  atexit(cleanup);
   mosq = mosquitto_new(NULL, true, NULL);
   mosquitto_username_pw_set(mosq, mosq_username, mosq_password);
   mosquitto_connect(mosq, mosq_host, mosq_port, MOSQ_KEEPALIVE);
 
   if (argc > 1 && strcmp(argv[1], "announce") == 0) {
-    mqtteer_announce_topics(mosq);
+    mqtteer_announce_topics();
   } else {
-    mqtteer_report_metrics(mosq);
+    mqtteer_report_metrics();
   }
 
-  cleanup(mosq, EXIT_SUCCESS);
+  exit(EXIT_SUCCESS);
 }
