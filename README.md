@@ -23,6 +23,7 @@ It uses the following environment variables to configure itself:
 * MQTTEER_USERNAME: MQTT username of the client
 * MQTTEER_PASSWORD: MQTT password of the client
 * MQTTEER_DEVICE_NAME: name that this device will have in Home Assistant
+* MQTTEER_DEBUG: print a lot of debugging information when defined
 
 You must run `mqtteer announce` once with to announce the device to Home
 Assistant. You should run it again when updating mqtteer as the format of

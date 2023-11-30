@@ -17,6 +17,7 @@
 
 static char *mqtteer_device_name;
 static struct mosquitto *mosq;
+static int mqtteer_debug = 0;
 
 void cleanup(void) {
   if (mosq != NULL)
@@ -100,7 +101,8 @@ void mqtteer_send_discovery(char *name, const char *device_class, const char *un
   cJSON_AddItemToObject(discovery_obj, "device", device_obj);
 
   char *discovery_payload = cJSON_Print(discovery_obj);
-  printf("%s\n", discovery_payload);
+  if (mqtteer_debug)
+    fprintf(stderr, "%s\n", discovery_payload);
   mqtteer_send(discovery_topic, discovery_payload);
 
   free(discovery_payload);
@@ -171,16 +173,19 @@ struct mqtteer_sensor* mqtteer_get_sensor(int* nr_chip, int* nr_feat) {
             sensor->device_class = TEMPERATURE;
             sensor->unit = CELSIUS;
             sensors_get_value(chip, sf->number, &sensor->value);
-            printf("found %s\n", sensor_name);
+            if (mqtteer_debug)
+              fprintf(stderr, "found %s\n", sensor_name);
 
             return sensor;
           } else {
-            printf("%s: could not get subfeature\n", sensor_name);
+            if (mqtteer_debug)
+              fprintf(stderr, "%s: could not get subfeature\n", sensor_name);
           }
           break;
         default:
-          printf("%s: unsupported feature type: %d\n", sensor_name,
-                 feature->type);
+          if (mqtteer_debug)
+            fprintf(stderr, "%s: unsupported feature type: %d\n", sensor_name,
+                    feature->type);
       }
 
       free(sensor_name);
@@ -205,7 +210,8 @@ char * mqtteer_getenv(char *name) {
 void mqtteer_announce_topics() {
   int nr_chip = 0, nr_feat = 0;
   struct mqtteer_sensor* sensor;
-  printf("announcing this device\n");
+  if (mqtteer_debug)
+    printf("announcing this device\n");
 
   mqtteer_send_discovery("uptime", "duration", "s");
   mqtteer_send_discovery("load1", "power_factor", NULL);
@@ -272,6 +278,8 @@ int main(int argc, char *argv[]) {
   char *mosq_password = mqtteer_getenv("MQTTEER_PASSWORD");
   char *mosq_host = mqtteer_getenv("MQTTEER_HOST");
   char *mosq_port_str = getenv("MQTTEER_PORT");
+  mqtteer_debug = getenv("MQTTEER_DEBUG") != NULL;
+
   char *port_endptr;
 
   if (mosq_port_str == NULL)
