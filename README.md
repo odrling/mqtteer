@@ -13,7 +13,8 @@ $ meson compile -C build
 ## Features
 
 When launched, mqtteer reports the current load average, memory usage and
-uptime of the computer it is running on.
+uptime and temperature sensors (as found by lm-sensors) of the computer it is
+running on.
 
 It uses the following environment variables to configure itself:
 
