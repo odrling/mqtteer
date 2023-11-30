@@ -145,8 +145,7 @@ char *mqtteer_sensor_get_name(char* chip_name, char* label) {
   return name;
 }
 
-struct mqtteer_sensor* mqtteer_get_sensor(int* nr_chip, int* nr_feat) {
-  const sensors_chip_name* chip;
+struct mqtteer_sensor* mqtteer_get_sensor(const struct sensors_chip_name *chip, int* nr_chip, int* nr_feat) {
   const sensors_feature *feature;
   const sensors_subfeature *sf;
   struct mqtteer_sensor *sensor;
@@ -154,7 +153,10 @@ struct mqtteer_sensor* mqtteer_get_sensor(int* nr_chip, int* nr_feat) {
   char* label;
   char* sensor_name;
 
-  while ((chip = sensors_get_detected_chips(NULL, nr_chip)) != NULL) {
+  if (chip == NULL)
+    chip = sensors_get_detected_chips(NULL, nr_chip);
+
+  while (chip != NULL) {
     sensors_snprintf_chip_name(name_buf, SENSORS_BUF_SIZE, chip);
 
     while ((feature = sensors_get_features(chip, nr_feat)) != NULL) {
@@ -189,6 +191,7 @@ struct mqtteer_sensor* mqtteer_get_sensor(int* nr_chip, int* nr_feat) {
       }
 
       free(sensor_name);
+      chip = sensors_get_detected_chips(NULL, nr_chip);
     }
 
     *nr_feat = 0;
@@ -210,6 +213,7 @@ char * mqtteer_getenv(char *name) {
 void mqtteer_announce_topics() {
   int nr_chip = 0, nr_feat = 0;
   struct mqtteer_sensor* sensor;
+  struct sensors_chip_name* chip = NULL;
   if (mqtteer_debug)
     printf("announcing this device\n");
 
@@ -221,7 +225,7 @@ void mqtteer_announce_topics() {
   mqtteer_send_discovery("total_memory", "data_size", "kB");
 
   mqtteer_sensors_init();
-  while ((sensor = mqtteer_get_sensor(&nr_chip, &nr_feat)) != NULL) {
+  while ((sensor = mqtteer_get_sensor(chip, &nr_chip, &nr_feat)) != NULL) {
     mqtteer_send_discovery(sensor->name, sensor->device_class, sensor->unit);
     mqtteer_sensor_free(sensor);
   }
@@ -235,6 +239,7 @@ void mqtteer_report_metrics() {
   unsigned long used, total;
   char state_topic[mqtteer_state_topic_len()];
   int nr_chip = 0, nr_feat = 0;
+  struct sensors_chip_name* chip = NULL;
   struct mqtteer_sensor* sensor;
 
   procps_loadavg(&av1, &av5, &av15);
@@ -257,7 +262,7 @@ void mqtteer_report_metrics() {
   cJSON_AddNumberToObject(state_obj, "total_memory", total);
 
   mqtteer_sensors_init();
-  while ((sensor = mqtteer_get_sensor(&nr_chip, &nr_feat)) != NULL) {
+  while ((sensor = mqtteer_get_sensor(chip, &nr_chip, &nr_feat)) != NULL) {
     cJSON_AddNumberToObject(state_obj, sensor->name, sensor->value);
     mqtteer_sensor_free(sensor);
   }
