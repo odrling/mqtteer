@@ -191,9 +191,9 @@ struct mqtteer_sensor* mqtteer_get_sensor(const struct sensors_chip_name *chip, 
       }
 
       free(sensor_name);
-      chip = sensors_get_detected_chips(NULL, nr_chip);
     }
 
+    chip = sensors_get_detected_chips(NULL, nr_chip);
     *nr_feat = 0;
   }
 
