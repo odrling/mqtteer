@@ -145,7 +145,7 @@ char *mqtteer_sensor_get_name(char* chip_name, char* label) {
   return name;
 }
 
-struct mqtteer_sensor* mqtteer_get_sensor(const struct sensors_chip_name *chip, int* nr_chip, int* nr_feat) {
+struct mqtteer_sensor* mqtteer_get_sensor(const struct sensors_chip_name *chip, int* nr_feat) {
   const sensors_feature *feature;
   const sensors_subfeature *sf;
   struct mqtteer_sensor *sensor;
@@ -153,49 +153,43 @@ struct mqtteer_sensor* mqtteer_get_sensor(const struct sensors_chip_name *chip, 
   char* label;
   char* sensor_name;
 
-  if (chip == NULL)
-    chip = sensors_get_detected_chips(NULL, nr_chip);
+  sensors_snprintf_chip_name(name_buf, SENSORS_BUF_SIZE, chip);
 
-  while (chip != NULL) {
-    sensors_snprintf_chip_name(name_buf, SENSORS_BUF_SIZE, chip);
+  while ((feature = sensors_get_features(chip, nr_feat)) != NULL) {
 
-    while ((feature = sensors_get_features(chip, nr_feat)) != NULL) {
+    label = sensors_get_label(chip, feature);
+    sensor_name = mqtteer_sensor_get_name(name_buf, label);
+    free(label);
 
-      label = sensors_get_label(chip, feature);
-      sensor_name = mqtteer_sensor_get_name(name_buf, label);
-      free(label);
+    switch (feature->type) {
+      case SENSORS_FEATURE_TEMP:
+        sf = sensors_get_subfeature(chip, feature, SENSORS_SUBFEATURE_TEMP_INPUT);
+        if (sf) {
+          sensor = malloc(sizeof(struct mqtteer_sensor));
 
-      switch (feature->type) {
-        case SENSORS_FEATURE_TEMP:
-          sf = sensors_get_subfeature(chip, feature, SENSORS_SUBFEATURE_TEMP_INPUT);
-          if (sf) {
-            sensor = malloc(sizeof(struct mqtteer_sensor));
-
-            sensor->name = sensor_name;
-            sensor->device_class = TEMPERATURE;
-            sensor->unit = CELSIUS;
-            sensors_get_value(chip, sf->number, &sensor->value);
-            if (mqtteer_debug)
-              fprintf(stderr, "found %s\n", sensor_name);
-
-            return sensor;
-          } else {
-            if (mqtteer_debug)
-              fprintf(stderr, "%s: could not get subfeature\n", sensor_name);
-          }
-          break;
-        default:
+          sensor->name = sensor_name;
+          sensor->device_class = TEMPERATURE;
+          sensor->unit = CELSIUS;
+          sensors_get_value(chip, sf->number, &sensor->value);
           if (mqtteer_debug)
-            fprintf(stderr, "%s: unsupported feature type: %d\n", sensor_name,
-                    feature->type);
-      }
+            fprintf(stderr, "found %s\n", sensor->name);
 
-      free(sensor_name);
+          return sensor;
+        } else {
+          if (mqtteer_debug)
+            fprintf(stderr, "%s: could not get subfeature\n", sensor_name);
+        }
+        break;
+      default:
+        if (mqtteer_debug)
+          fprintf(stderr, "%s: unsupported feature type: %d\n", sensor_name,
+                  feature->type);
     }
 
-    chip = sensors_get_detected_chips(NULL, nr_chip);
-    *nr_feat = 0;
+    free(sensor_name);
   }
+
+  *nr_feat = 0;
 
   return NULL;
 }
@@ -213,7 +207,7 @@ char * mqtteer_getenv(char *name) {
 void mqtteer_announce_topics() {
   int nr_chip = 0, nr_feat = 0;
   struct mqtteer_sensor* sensor;
-  struct sensors_chip_name* chip = NULL;
+  const struct sensors_chip_name* chip = NULL;
   if (mqtteer_debug)
     printf("announcing this device\n");
 
@@ -225,9 +219,11 @@ void mqtteer_announce_topics() {
   mqtteer_send_discovery("total_memory", "data_size", "kB");
 
   mqtteer_sensors_init();
-  while ((sensor = mqtteer_get_sensor(chip, &nr_chip, &nr_feat)) != NULL) {
-    mqtteer_send_discovery(sensor->name, sensor->device_class, sensor->unit);
-    mqtteer_sensor_free(sensor);
+  while ((chip = sensors_get_detected_chips(NULL, &nr_chip)) != NULL) {
+    while ((sensor = mqtteer_get_sensor(chip, &nr_feat)) != NULL) {
+      mqtteer_send_discovery(sensor->name, sensor->device_class, sensor->unit);
+      mqtteer_sensor_free(sensor);
+    }
   }
   sensors_cleanup();
 }
@@ -239,7 +235,7 @@ void mqtteer_report_metrics() {
   unsigned long used, total;
   char state_topic[mqtteer_state_topic_len()];
   int nr_chip = 0, nr_feat = 0;
-  struct sensors_chip_name* chip = NULL;
+  const struct sensors_chip_name* chip = NULL;
   struct mqtteer_sensor* sensor;
 
   procps_loadavg(&av1, &av5, &av15);
@@ -262,9 +258,12 @@ void mqtteer_report_metrics() {
   cJSON_AddNumberToObject(state_obj, "total_memory", total);
 
   mqtteer_sensors_init();
-  while ((sensor = mqtteer_get_sensor(chip, &nr_chip, &nr_feat)) != NULL) {
-    cJSON_AddNumberToObject(state_obj, sensor->name, sensor->value);
-    mqtteer_sensor_free(sensor);
+
+  while ((chip = sensors_get_detected_chips(NULL, &nr_chip)) != NULL) {
+    while ((sensor = mqtteer_get_sensor(chip, &nr_feat)) != NULL) {
+      cJSON_AddNumberToObject(state_obj, sensor->name, sensor->value);
+      mqtteer_sensor_free(sensor);
+    }
   }
   sensors_cleanup();
 
