@@ -11,9 +11,11 @@
 #include <string.h>
 #include <unistd.h>
 
-#define MOSQ_KEEPALIVE 30
+#define MOSQ_KEEPALIVE 90
 #define DISCOVERY_TOPIC_PREFIX "homeassistant"
 #define SENSORS_BUF_SIZE 200
+
+#define RUNNING_ENTITY_NAME "running"
 
 static char *mqtteer_device_name;
 static struct mosquitto *mosq;
@@ -211,6 +213,7 @@ void mqtteer_announce_topics() {
   if (mqtteer_debug)
     printf("announcing this device\n");
 
+  mqtteer_send_discovery(RUNNING_ENTITY_NAME, NULL, NULL);
   mqtteer_send_discovery("uptime", "duration", "s");
   mqtteer_send_discovery("load1", "power_factor", NULL);
   mqtteer_send_discovery("load5", "power_factor", NULL);
@@ -250,6 +253,7 @@ void mqtteer_report_metrics() {
   procps_meminfo_unref(&meminfo);
 
   cJSON *state_obj = cJSON_CreateObject();
+  cJSON_AddBoolToObject(state_obj, RUNNING_ENTITY_NAME, true);
   cJSON_AddNumberToObject(state_obj, "uptime", uptime);
   cJSON_AddNumberToObject(state_obj, "load1", av1);
   cJSON_AddNumberToObject(state_obj, "load5", av5);
@@ -269,13 +273,26 @@ void mqtteer_report_metrics() {
 
   char *payload = cJSON_Print(state_obj);
 
+  if (mqtteer_debug)
+    printf("%s\n", payload);
+
   mqtteer_get_state_topic_name(state_topic);
   mqtteer_send(state_topic, payload);
   free(payload);
   cJSON_Delete(state_obj);
 }
 
-int main(int argc, char *argv[]) {
+void mqtteer_set_will() {
+  char payload[] = "{\"" RUNNING_ENTITY_NAME "\":false}";
+  int payload_len = strlen(payload);
+
+  char state_topic[mqtteer_state_topic_len()];
+  mqtteer_get_state_topic_name(state_topic);
+
+  mosquitto_will_set(mosq, state_topic, payload_len, payload, 0, false);
+}
+
+int main(void) {
   int mosq_port;
 
   char *mosq_username = mqtteer_getenv("MQTTEER_USERNAME");
@@ -300,14 +317,16 @@ int main(int argc, char *argv[]) {
 
   mosquitto_lib_init();
   atexit(cleanup);
-  mosq = mosquitto_new(NULL, true, NULL);
+  mosq = mosquitto_new(mqtteer_device_name, true, NULL);
   mosquitto_username_pw_set(mosq, mosq_username, mosq_password);
+  mqtteer_set_will();
   mosquitto_connect(mosq, mosq_host, mosq_port, MOSQ_KEEPALIVE);
 
-  if (argc > 1 && strcmp(argv[1], "announce") == 0) {
-    mqtteer_announce_topics();
-  } else {
+  mqtteer_announce_topics();
+
+  while (true) {
     mqtteer_report_metrics();
+    sleep(60);
   }
 
   exit(EXIT_SUCCESS);
