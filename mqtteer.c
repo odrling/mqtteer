@@ -322,9 +322,8 @@ int main(void) {
   mqtteer_set_will();
   mosquitto_connect(mosq, mosq_host, mosq_port, MOSQ_KEEPALIVE);
 
-  mqtteer_announce_topics();
-
   while (true) {
+    mqtteer_announce_topics();
     mqtteer_report_metrics();
     sleep(60);
   }
