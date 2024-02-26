@@ -1,5 +1,8 @@
 
 #include <cjson/cJSON.h>
+#include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <libproc2/meminfo.h>
 #include <libproc2/misc.h>
 #include <locale.h>
@@ -206,6 +209,98 @@ char * mqtteer_getenv(char *name) {
   return value;
 }
 
+struct mqtteer_battery {
+  char* name;
+  uint8_t capacity;
+};
+
+void mqtteer_free_battery(struct mqtteer_battery *battery) {
+  free(battery->name);
+  free(battery);
+}
+
+struct mqtteer_batteries {
+  unsigned n;
+  struct mqtteer_battery **batteries;
+};
+
+void mqtteer_free_batteries(struct mqtteer_batteries *batteries) {
+  for (unsigned i = 0; i < batteries->n; i++) {
+    mqtteer_free_battery(batteries->batteries[i]);
+  }
+  free(batteries);
+}
+
+#define POWER_SUPPLY_DIR "/sys/class/power_supply"
+#define BATTERY_CAPACITY_NAME "capacity"
+struct mqtteer_batteries *mqtteer_get_batteries() {
+  struct dirent *power_supply;
+  DIR* power_supplies_dir = opendir(POWER_SUPPLY_DIR);
+  if (power_supplies_dir == NULL)
+    perror("could not open " POWER_SUPPLY_DIR);
+
+  struct mqtteer_batteries *batteries = malloc(sizeof(struct mqtteer_batteries));
+  batteries->n = 0;
+  batteries->batteries = NULL;
+  int power_supplies_dir_fd = dirfd(power_supplies_dir);
+
+  while ((power_supply = readdir(power_supplies_dir)) != NULL) {
+    int power_supply_fd =
+        openat(power_supplies_dir_fd, power_supply->d_name, O_RDONLY);
+
+    if (power_supply_fd < 0) {
+      fprintf(stderr, "could not open power supply subdirectory %s",
+              power_supply->d_name);
+      continue;
+    }
+
+    int power_supply_capacity_fd =
+        openat(power_supply_fd, BATTERY_CAPACITY_NAME, O_RDONLY);
+
+    if (power_supply_capacity_fd < 0) {
+      if (errno == ENOENT) {
+        if (mqtteer_debug)
+          printf("skipping power supply %s: not a battery",
+                 power_supply->d_name);
+
+        goto ps_close;
+      }
+    }
+
+    char buf[4];
+    int readout = read(power_supply_capacity_fd, buf, 4);
+    if (readout < 0) {
+      perror("failed to read battery");
+      goto ps_close_capacity;
+    }
+
+    char *endptr;
+    uint8_t capacity = (uint8_t) strtol(buf, &endptr, 10);
+    if (buf == endptr) {
+      fprintf(stderr, "failed to parse battery capacity %s", power_supply->d_name);
+      goto ps_close_capacity;
+    }
+
+    struct mqtteer_battery *bat = malloc(sizeof(struct mqtteer_battery));
+    bat->name = strdup(power_supply->d_name);  // probably should use model_name & serial_number
+    bat->capacity = capacity;
+
+    batteries->batteries =
+        realloc(batteries->batteries,
+                batteries->n + 1 * sizeof(struct mqtteer_battery));
+    batteries->batteries[batteries->n] = bat;
+    batteries->n++;
+
+ps_close_capacity:
+    close(power_supply_capacity_fd);
+ps_close:
+    close(power_supply_fd);
+  }
+
+  closedir(power_supplies_dir);
+  return batteries;
+}
+
 void mqtteer_announce_topics() {
   int nr_chip = 0, nr_feat = 0;
   struct mqtteer_sensor* sensor;
@@ -221,6 +316,12 @@ void mqtteer_announce_topics() {
   mqtteer_send_discovery("used_memory", "data_size", "kB");
   mqtteer_send_discovery("total_memory", "data_size", "kB");
 
+  struct mqtteer_batteries *batteries = mqtteer_get_batteries();
+
+  for (unsigned i = 0; i < batteries->n; i++) {
+    mqtteer_send_discovery(batteries->batteries[i]->name, "battery", "%");
+  }
+
   mqtteer_sensors_init();
   while ((chip = sensors_get_detected_chips(NULL, &nr_chip)) != NULL) {
     while ((sensor = mqtteer_get_sensor(chip, &nr_feat)) != NULL) {
@@ -228,6 +329,8 @@ void mqtteer_announce_topics() {
       mqtteer_sensor_free(sensor);
     }
   }
+
+  mqtteer_free_batteries(batteries);
   sensors_cleanup();
 }
 
@@ -261,6 +364,13 @@ void mqtteer_report_metrics() {
   cJSON_AddNumberToObject(state_obj, "used_memory", used);
   cJSON_AddNumberToObject(state_obj, "total_memory", total);
 
+  struct mqtteer_batteries *batteries = mqtteer_get_batteries();
+
+  for (unsigned i = 0; i < batteries->n; i++) {
+    cJSON_AddNumberToObject(state_obj, batteries->batteries[i]->name,
+                            batteries->batteries[i]->capacity);
+  }
+
   mqtteer_sensors_init();
 
   while ((chip = sensors_get_detected_chips(NULL, &nr_chip)) != NULL) {
@@ -276,6 +386,7 @@ void mqtteer_report_metrics() {
   if (mqtteer_debug)
     printf("%s\n", payload);
 
+  mqtteer_free_batteries(batteries);
   mqtteer_get_state_topic_name(state_topic);
   mqtteer_send(state_topic, payload);
   free(payload);
