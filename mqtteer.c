@@ -377,7 +377,7 @@ int mqtteer_psi_get(const char kind[], struct mqtteer_psi *psi) {
     return psi_fd;
   }
 
-  ssize_t count = read(psi_fd, buf, PSI_BUF_SIZE);
+  ssize_t count = read(psi_fd, buf, PSI_BUF_SIZE - 1);
   buf[count] = '\0';
   if (count <= 0) {
     perror("failed to read PSI");
