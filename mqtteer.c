@@ -318,7 +318,7 @@ struct mqtteer_psi {
 
 int parsedblto(char **buf, double *metrics) {
   char *endptr = *buf;
-  *metrics = strtod((*buf) + 2, &endptr);
+  *metrics = strtod((*buf), &endptr);
   if (*buf == endptr) {
     fprintf(stderr, "failed to parse pressure %s\n", *buf);
     return -1;
