@@ -273,7 +273,8 @@ struct mqtteer_batteries *mqtteer_get_batteries() {
     }
 
     char buf[4];
-    int readout = read(power_supply_capacity_fd, buf, 4);
+    ssize_t readout = read(power_supply_capacity_fd, buf, 4);
+    buf[readout] = '\0';
     if (readout < 0) {
       perror("failed to read battery");
       goto ps_close_capacity;
