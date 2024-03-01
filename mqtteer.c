@@ -426,22 +426,22 @@ void mqtteer_announce_topics() {
     char name[strlen("psi_memory_some_avg300") + 1]; // longest name
 
     sprintf(name, "psi_%s_some_avg10", PRESSURE_KINDS[i]);
-    mqtteer_send_discovery(name, "power_factor", NULL);
+    mqtteer_send_discovery(name, "power_factor", "%");
     sprintf(name, "psi_%s_some_avg60", PRESSURE_KINDS[i]);
-    mqtteer_send_discovery(name, "power_factor", NULL);
+    mqtteer_send_discovery(name, "power_factor", "%");
     sprintf(name, "psi_%s_some_avg300", PRESSURE_KINDS[i]);
-    mqtteer_send_discovery(name, "power_factor", NULL);
+    mqtteer_send_discovery(name, "power_factor", "%");
     sprintf(name, "psi_%s_some_total", PRESSURE_KINDS[i]);
-    mqtteer_send_discovery(name, "power_factor", NULL);
+    mqtteer_send_discovery(name, "power_factor", "ms");
 
     sprintf(name, "psi_%s_full_avg10", PRESSURE_KINDS[i]);
-    mqtteer_send_discovery(name, "power_factor", NULL);
+    mqtteer_send_discovery(name, "power_factor", "%");
     sprintf(name, "psi_%s_full_avg60", PRESSURE_KINDS[i]);
-    mqtteer_send_discovery(name, "power_factor", NULL);
+    mqtteer_send_discovery(name, "power_factor", "%");
     sprintf(name, "psi_%s_full_avg300", PRESSURE_KINDS[i]);
-    mqtteer_send_discovery(name, "power_factor", NULL);
+    mqtteer_send_discovery(name, "power_factor", "%");
     sprintf(name, "psi_%s_full_total", PRESSURE_KINDS[i]);
-    mqtteer_send_discovery(name, "power_factor", NULL);
+    mqtteer_send_discovery(name, "power_factor", "ms");
   }
 
   struct mqtteer_batteries *batteries = mqtteer_get_batteries();
