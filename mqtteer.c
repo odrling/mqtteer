@@ -435,7 +435,7 @@ void mqtteer_announce_topics() {
     sprintf(name, "psi_%s_some_avg300", PRESSURE_KINDS[i]);
     mqtteer_send_discovery(name, "power_factor", "%");
     sprintf(name, "psi_%s_some_total", PRESSURE_KINDS[i]);
-    mqtteer_send_discovery(name, "power_factor", "ms");
+    mqtteer_send_discovery(name, "power_factor", "μs");
 
     sprintf(name, "psi_%s_full_avg10", PRESSURE_KINDS[i]);
     mqtteer_send_discovery(name, "power_factor", "%");
@@ -444,7 +444,7 @@ void mqtteer_announce_topics() {
     sprintf(name, "psi_%s_full_avg300", PRESSURE_KINDS[i]);
     mqtteer_send_discovery(name, "power_factor", "%");
     sprintf(name, "psi_%s_full_total", PRESSURE_KINDS[i]);
-    mqtteer_send_discovery(name, "power_factor", "ms");
+    mqtteer_send_discovery(name, "power_factor", "μs");
   }
 
   struct mqtteer_batteries *batteries = mqtteer_get_batteries();
