@@ -227,13 +227,11 @@ void mqtteer_free_battery(struct mqtteer_battery *battery) {
 
 struct mqtteer_batteries {
   unsigned n;
-  struct mqtteer_battery **batteries;
+  struct mqtteer_battery *batteries;
 };
 
 void mqtteer_free_batteries(struct mqtteer_batteries *batteries) {
-  for (unsigned i = 0; i < batteries->n; i++) {
-    mqtteer_free_battery(batteries->batteries[i]);
-  }
+  free(batteries->batteries);
   free(batteries);
 }
 
@@ -289,15 +287,11 @@ struct mqtteer_batteries *mqtteer_get_batteries() {
       goto ps_close_capacity;
     }
 
-    struct mqtteer_battery *bat = malloc(sizeof(struct mqtteer_battery));
-    bat->name = strdup(
-        power_supply->d_name); // probably should use model_name & serial_number
-    bat->capacity = capacity;
-
-    batteries->batteries =
-        realloc(batteries->batteries,
-                batteries->n + 1 * sizeof(struct mqtteer_battery));
-    batteries->batteries[batteries->n] = bat;
+    size_t new_size = (batteries->n + 1) * sizeof(struct mqtteer_battery);
+    batteries->batteries = realloc(batteries->batteries, new_size);
+    // probably should use model_name & serial_number
+    batteries->batteries[batteries->n].name = strdup(power_supply->d_name);
+    batteries->batteries[batteries->n].capacity = capacity;
     batteries->n++;
 
   ps_close_capacity:
@@ -453,7 +447,7 @@ void mqtteer_announce_topics() {
   struct mqtteer_batteries *batteries = mqtteer_get_batteries();
 
   for (unsigned i = 0; i < batteries->n; i++) {
-    mqtteer_send_discovery(batteries->batteries[i]->name, "battery", "%");
+    mqtteer_send_discovery(batteries->batteries[i].name, "battery", "%");
   }
 
   mqtteer_sensors_init();
@@ -531,8 +525,8 @@ void mqtteer_report_metrics() {
   struct mqtteer_batteries *batteries = mqtteer_get_batteries();
 
   for (unsigned i = 0; i < batteries->n; i++) {
-    cJSON_AddNumberToObject(state_obj, batteries->batteries[i]->name,
-                            batteries->batteries[i]->capacity);
+    cJSON_AddNumberToObject(state_obj, batteries->batteries[i].name,
+                            batteries->batteries[i].capacity);
   }
 
   mqtteer_sensors_init();
