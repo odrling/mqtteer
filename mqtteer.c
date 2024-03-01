@@ -398,7 +398,8 @@ int mqtteer_psi_get(const char kind[], struct mqtteer_psi *psi) {
         return -1;
       break;
     default:
-      fprintf(stderr, "unknown pressure type %s", bufpos);
+      fprintf(stderr, "unknown pressure type %s\n", bufpos);
+      return -1;
     }
   }
 
