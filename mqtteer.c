@@ -24,6 +24,9 @@ static char *mqtteer_device_name;
 static struct mosquitto *mosq;
 static int mqtteer_debug = 0;
 
+#define NPSI_KINDS 3
+static const char *PRESSURE_KINDS[NPSI_KINDS] = {"cpu", "memory", "io"};
+
 void cleanup(void) {
   if (mosq != NULL)
     mosquitto_destroy(mosq);
@@ -281,7 +284,7 @@ struct mqtteer_batteries *mqtteer_get_batteries() {
     char *endptr;
     uint8_t capacity = (uint8_t)strtol(buf, &endptr, 10);
     if (buf == endptr) {
-      fprintf(stderr, "failed to parse battery capacity %s",
+      fprintf(stderr, "failed to parse battery capacity %s\n",
               power_supply->d_name);
       goto ps_close_capacity;
     }
@@ -307,6 +310,107 @@ struct mqtteer_batteries *mqtteer_get_batteries() {
   return batteries;
 }
 
+struct mqtteer_psi_metrics {
+  double avg10;
+  double avg60;
+  double avg300;
+  long total;
+};
+
+struct mqtteer_psi {
+  struct mqtteer_psi_metrics some;
+  struct mqtteer_psi_metrics full;
+};
+
+int parsedblto(char **buf, double *metrics) {
+  char *endptr = *buf;
+  *metrics = strtod((*buf) + 2, &endptr);
+  if (*buf == endptr) {
+    fprintf(stderr, "failed to parse pressure %s\n", *buf);
+    return -1;
+  }
+
+  *buf = endptr + 1;
+  return 0;
+}
+
+int mqtteer_psi_set(char **buf, struct mqtteer_psi_metrics *psi_metrics) {
+  while (**buf != '=')
+    *buf += 1;
+  *buf += 1;
+  if (parsedblto(buf, &psi_metrics->avg10) < 0)
+    goto failed;
+
+  while (**buf != '=')
+    *buf += 1;
+  *buf += 1;
+  if (parsedblto(buf, &psi_metrics->avg60))
+    goto failed;
+
+  while (**buf != '=')
+    *buf += 1;
+  *buf += 1;
+  if (parsedblto(buf, &psi_metrics->avg300) < 0)
+    goto failed;
+
+  while (**buf != '=')
+    *buf += 1;
+  *buf += 1;
+  char *endptr = *buf;
+  psi_metrics->total = strtol(*buf, &endptr, 10);
+  if (endptr == *buf)
+    goto failed;
+
+  *buf = endptr + 1;
+
+  return 0;
+
+failed:
+  fprintf(stderr, "failed to parse pressure stall file %d %s\n", **buf, *buf);
+  return -1;
+}
+
+#define PSI_DIR "/proc/pressure/"
+#define PSI_BUF_SIZE 128
+int mqtteer_psi_get(const char kind[], struct mqtteer_psi *psi) {
+  char buf[PSI_BUF_SIZE];
+  char psi_path[strlen(PSI_DIR) + strlen(kind) + 1];
+  sprintf(psi_path, "%s%s", PSI_DIR, kind);
+
+  int psi_fd = open(psi_path, O_RDONLY);
+  if (psi_fd < 0) {
+    perror("failed to open PSI");
+    return psi_fd;
+  }
+
+  ssize_t count = read(psi_fd, buf, PSI_BUF_SIZE);
+  if (count <= 0) {
+    perror("failed to read PSI");
+    return psi_fd;
+  }
+
+  char *bufpos = buf;
+
+  while (bufpos[0] != '\0') {
+    switch (bufpos[0]) {
+    case 's':
+      // assume some
+      if (mqtteer_psi_set(&bufpos, &psi->some) < 0)
+        return -1;
+      break;
+    case 'f':
+      // assume full
+      if (mqtteer_psi_set(&bufpos, &psi->full) < 0)
+        return -1;
+      break;
+    default:
+      fprintf(stderr, "unknown pressure type %s", bufpos);
+    }
+  }
+
+  return 0;
+}
+
 void mqtteer_announce_topics() {
   int nr_chip = 0, nr_feat = 0;
   struct mqtteer_sensor *sensor;
@@ -321,6 +425,30 @@ void mqtteer_announce_topics() {
   mqtteer_send_discovery("load15", "power_factor", NULL);
   mqtteer_send_discovery("used_memory", "data_size", "kB");
   mqtteer_send_discovery("total_memory", "data_size", "kB");
+
+  // NOTE: PSI could be disabled on the system
+  // in which case these entities would be marked "Unavailable"
+  for (unsigned i = 0; i < NPSI_KINDS; i++) {
+    char name[strlen("psi_memory_some_avg300") + 1]; // longest name
+
+    sprintf(name, "psi_%s_some_avg10", PRESSURE_KINDS[i]);
+    mqtteer_send_discovery(name, "power_factor", NULL);
+    sprintf(name, "psi_%s_some_avg60", PRESSURE_KINDS[i]);
+    mqtteer_send_discovery(name, "power_factor", NULL);
+    sprintf(name, "psi_%s_some_avg300", PRESSURE_KINDS[i]);
+    mqtteer_send_discovery(name, "power_factor", NULL);
+    sprintf(name, "psi_%s_some_total", PRESSURE_KINDS[i]);
+    mqtteer_send_discovery(name, "power_factor", NULL);
+
+    sprintf(name, "psi_%s_full_avg10", PRESSURE_KINDS[i]);
+    mqtteer_send_discovery(name, "power_factor", NULL);
+    sprintf(name, "psi_%s_full_avg60", PRESSURE_KINDS[i]);
+    mqtteer_send_discovery(name, "power_factor", NULL);
+    sprintf(name, "psi_%s_full_avg300", PRESSURE_KINDS[i]);
+    mqtteer_send_discovery(name, "power_factor", NULL);
+    sprintf(name, "psi_%s_full_total", PRESSURE_KINDS[i]);
+    mqtteer_send_discovery(name, "power_factor", NULL);
+  }
 
   struct mqtteer_batteries *batteries = mqtteer_get_batteries();
 
@@ -338,6 +466,33 @@ void mqtteer_announce_topics() {
 
   mqtteer_free_batteries(batteries);
   sensors_cleanup();
+}
+
+static void mqtteer_set_psi(const char *kind, cJSON *state_obj) {
+  struct mqtteer_psi psi;
+  int ret = mqtteer_psi_get(kind, &psi);
+  if (ret < 0)
+    return;
+
+  char name[strlen("psi_memory_some_avg300") + 1]; // longest name
+
+  sprintf(name, "psi_%s_some_avg10", kind);
+  cJSON_AddNumberToObject(state_obj, name, psi.some.avg10);
+  sprintf(name, "psi_%s_some_avg60", kind);
+  cJSON_AddNumberToObject(state_obj, name, psi.some.avg60);
+  sprintf(name, "psi_%s_some_avg300", kind);
+  cJSON_AddNumberToObject(state_obj, name, psi.some.avg300);
+  sprintf(name, "psi_%s_some_total", kind);
+  cJSON_AddNumberToObject(state_obj, name, psi.some.total);
+
+  sprintf(name, "psi_%s_full_avg10", kind);
+  cJSON_AddNumberToObject(state_obj, name, psi.full.avg10);
+  sprintf(name, "psi_%s_full_avg60", kind);
+  cJSON_AddNumberToObject(state_obj, name, psi.full.avg60);
+  sprintf(name, "psi_%s_full_avg300", kind);
+  cJSON_AddNumberToObject(state_obj, name, psi.full.avg300);
+  sprintf(name, "psi_%s_full_total", kind);
+  cJSON_AddNumberToObject(state_obj, name, psi.full.total);
 }
 
 void mqtteer_report_metrics() {
@@ -369,6 +524,9 @@ void mqtteer_report_metrics() {
   cJSON_AddNumberToObject(state_obj, "load15", av15);
   cJSON_AddNumberToObject(state_obj, "used_memory", used);
   cJSON_AddNumberToObject(state_obj, "total_memory", total);
+
+  for (unsigned i = 0; i < NPSI_KINDS; i++)
+    mqtteer_set_psi(PRESSURE_KINDS[i], state_obj);
 
   struct mqtteer_batteries *batteries = mqtteer_get_batteries();
 
