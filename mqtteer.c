@@ -231,7 +231,8 @@ struct mqtteer_batteries {
 };
 
 void mqtteer_free_batteries(struct mqtteer_batteries *batteries) {
-  free(batteries->batteries);
+  if (batteries->batteries != NULL)
+    free(batteries->batteries);
   free(batteries);
 }
 
@@ -247,6 +248,10 @@ struct mqtteer_batteries *mqtteer_get_batteries() {
       malloc(sizeof(struct mqtteer_batteries));
   batteries->n = 0;
   batteries->batteries = NULL;
+
+  if (power_supplies_dir == NULL)
+    return batteries;
+
   int power_supplies_dir_fd = dirfd(power_supplies_dir);
 
   while ((power_supply = readdir(power_supplies_dir)) != NULL) {
