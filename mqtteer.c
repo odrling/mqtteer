@@ -225,12 +225,12 @@ void mqtteer_free_battery(struct mqtteer_battery *battery) {
   free(battery);
 }
 
-struct mqtteer_batteries {
+typedef struct {
   unsigned n;
   struct mqtteer_battery *batteries;
-};
+} mqtteer_batteries;
 
-void mqtteer_free_batteries(struct mqtteer_batteries *batteries) {
+void mqtteer_free_batteries(mqtteer_batteries *batteries) {
   if (batteries->batteries != NULL)
     free(batteries->batteries);
   free(batteries);
@@ -238,14 +238,13 @@ void mqtteer_free_batteries(struct mqtteer_batteries *batteries) {
 
 #define POWER_SUPPLY_DIR "/sys/class/power_supply"
 #define BATTERY_CAPACITY_NAME "capacity"
-struct mqtteer_batteries *mqtteer_get_batteries() {
+mqtteer_batteries *mqtteer_get_batteries() {
   struct dirent *power_supply;
   DIR *power_supplies_dir = opendir(POWER_SUPPLY_DIR);
   if (power_supplies_dir == NULL)
     perror("could not open " POWER_SUPPLY_DIR);
 
-  struct mqtteer_batteries *batteries =
-      malloc(sizeof(struct mqtteer_batteries));
+  mqtteer_batteries *batteries = malloc(sizeof(mqtteer_batteries));
   batteries->n = 0;
   batteries->batteries = NULL;
 
@@ -452,7 +451,7 @@ void mqtteer_announce_topics() {
     mqtteer_send_discovery(name, "power_factor", "μs");
   }
 
-  struct mqtteer_batteries *batteries = mqtteer_get_batteries();
+  mqtteer_batteries *batteries = mqtteer_get_batteries();
 
   for (unsigned i = 0; i < batteries->n; i++) {
     mqtteer_send_discovery(batteries->batteries[i].name, "battery", "%");
@@ -530,7 +529,7 @@ void mqtteer_report_metrics() {
   for (unsigned i = 0; i < NPSI_KINDS; i++)
     mqtteer_set_psi(PRESSURE_KINDS[i], state_obj);
 
-  struct mqtteer_batteries *batteries = mqtteer_get_batteries();
+  mqtteer_batteries *batteries = mqtteer_get_batteries();
 
   for (unsigned i = 0; i < batteries->n; i++) {
     cJSON_AddNumberToObject(state_obj, batteries->batteries[i].name,
