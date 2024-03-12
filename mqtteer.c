@@ -425,7 +425,7 @@ int mqtteer_psi_get(const char kind[], struct mqtteer_psi *psi) {
   buf[count] = '\0';
   if (count <= 0) {
     perror("failed to read PSI");
-    return psi_fd;
+    goto err_return;
   }
 
   char *bufpos = buf;
@@ -435,20 +435,25 @@ int mqtteer_psi_get(const char kind[], struct mqtteer_psi *psi) {
     case 's':
       // assume some
       if (mqtteer_psi_set(&bufpos, &psi->some) < 0)
-        return -1;
+        goto err_return;
       break;
     case 'f':
       // assume full
       if (mqtteer_psi_set(&bufpos, &psi->full) < 0)
-        return -1;
+        goto err_return;
       break;
     default:
       fprintf(stderr, "unknown pressure type %s\n", bufpos);
-      return -1;
+      goto err_return;
     }
   }
 
+  cclose(psi_fd);
   return 0;
+
+err_return:
+  cclose(psi_fd);
+  return -1;
 }
 
 void mqtteer_announce_topics() {
