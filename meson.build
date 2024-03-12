@@ -1,4 +1,4 @@
-project('mqtteer', 'c', version: '2.2.6')
+project('mqtteer', 'c', version: '2.2.7')
 
 mosquitto = dependency('libmosquitto')
 proc2 = dependency('libproc2')
