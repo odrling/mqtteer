@@ -605,7 +605,7 @@ void mqtteer_set_will() {
   mosquitto_will_set(mosq, state_topic, payload_len, payload, 0, false);
 }
 
-int main(void) {
+static void mqtteer_init_mosquitto() {
   int mosq_port;
 
   char *mosq_username = mqtteer_getenv("MQTTEER_USERNAME");
@@ -634,6 +634,11 @@ int main(void) {
   mosquitto_username_pw_set(mosq, mosq_username, mosq_password);
   mqtteer_set_will();
   mosquitto_connect(mosq, mosq_host, mosq_port, MOSQ_KEEPALIVE);
+
+}
+
+int main(void) {
+  mqtteer_init_mosquitto();
 
   while (true) {
     mqtteer_announce_topics();
