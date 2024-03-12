@@ -308,9 +308,11 @@ mqtteer_batteries *mqtteer_get_batteries() {
         if (mqtteer_debug)
           printf("skipping power supply %s: not a battery",
                  power_supply->d_name);
-
-        goto ps_close;
+      } else {
+        perror("could not read battery capacity");
       }
+
+      goto ps_close;
     }
 
     char buf[4];
