@@ -254,6 +254,9 @@ mqtteer_batteries *mqtteer_get_batteries() {
   int power_supplies_dir_fd = dirfd(power_supplies_dir);
 
   while ((power_supply = readdir(power_supplies_dir)) != NULL) {
+    if (power_supply->d_name[0] == '.')
+      continue;
+
     int power_supply_fd =
         openat(power_supplies_dir_fd, power_supply->d_name, O_RDONLY);
 
