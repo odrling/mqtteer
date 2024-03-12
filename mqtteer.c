@@ -62,7 +62,7 @@ static inline void *mmalloc(int len) {
 static inline void *rrealloc(void *ptr, int len) {
   void *out_ptr = realloc(ptr, len);
   if (out_ptr == NULL) {
-    perror("malloc failed");
+    perror("realloc failed");
     exit(-1);
   }
   return out_ptr;
