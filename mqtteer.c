@@ -34,6 +34,40 @@ void cleanup(void) {
   mosquitto_lib_cleanup();
 }
 
+// mqtteer should fail fast
+
+static inline void cclose(int fd) {
+  if (close(fd) != 0) {
+    perror("close failed");
+    exit(-1);
+  }
+}
+
+static inline void cclosedir(DIR *dir) {
+  if (closedir(dir) != 0) {
+    perror("closedir failed");
+    exit(-1);
+  }
+}
+
+static inline void *mmalloc(int len) {
+  void *ptr = malloc(len);
+  if (ptr == NULL) {
+    perror("malloc failed");
+    exit(-1);
+  }
+  return ptr;
+}
+
+static inline void *rrealloc(void *ptr, int len) {
+  void *out_ptr = realloc(ptr, len);
+  if (out_ptr == NULL) {
+    perror("malloc failed");
+    exit(-1);
+  }
+  return out_ptr;
+}
+
 void mqtteer_send(char *topic, char *payload) {
   int payload_len;
   int ret;
@@ -150,7 +184,7 @@ void mqtteer_sensors_init() {
 
 char *mqtteer_sensor_get_name(char *chip_name, char *label) {
   int len = strlen(chip_name) + strlen(label) + 2;
-  char *name = malloc(len);
+  char *name = mmalloc(len);
 
   snprintf(name, len, "%s_%s", chip_name, label);
   return name;
@@ -177,7 +211,7 @@ struct mqtteer_sensor *mqtteer_get_sensor(const struct sensors_chip_name *chip,
     case SENSORS_FEATURE_TEMP:
       sf = sensors_get_subfeature(chip, feature, SENSORS_SUBFEATURE_TEMP_INPUT);
       if (sf) {
-        sensor = malloc(sizeof(struct mqtteer_sensor));
+        sensor = mmalloc(sizeof(struct mqtteer_sensor));
 
         sensor->name = sensor_name;
         sensor->device_class = TEMPERATURE;
@@ -244,7 +278,7 @@ mqtteer_batteries *mqtteer_get_batteries() {
   if (power_supplies_dir == NULL)
     perror("could not open " POWER_SUPPLY_DIR);
 
-  mqtteer_batteries *batteries = malloc(sizeof(mqtteer_batteries));
+  mqtteer_batteries *batteries = mmalloc(sizeof(mqtteer_batteries));
   batteries->n = 0;
   batteries->batteries = NULL;
 
@@ -296,19 +330,19 @@ mqtteer_batteries *mqtteer_get_batteries() {
     }
 
     size_t new_size = (batteries->n + 1) * sizeof(struct mqtteer_battery);
-    batteries->batteries = realloc(batteries->batteries, new_size);
+    batteries->batteries = rrealloc(batteries->batteries, new_size);
     // probably should use model_name & serial_number
     batteries->batteries[batteries->n].name = strdup(power_supply->d_name);
     batteries->batteries[batteries->n].capacity = capacity;
     batteries->n++;
 
   ps_close_capacity:
-    close(power_supply_capacity_fd);
+    cclose(power_supply_capacity_fd);
   ps_close:
-    close(power_supply_fd);
+    cclose(power_supply_fd);
   }
 
-  closedir(power_supplies_dir);
+  cclosedir(power_supplies_dir);
   return batteries;
 }
 
