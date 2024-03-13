@@ -108,6 +108,112 @@ void mqtteer_get_unique_id(char *unique_id, char *name, char *device_name) {
   sprintf(unique_id, "%s_%s", device_name, name);
 }
 
+union mqtteer_value {
+  double dblval;
+  long lval;
+  unsigned ulval;
+  int ival;
+  char *strval;
+};
+
+enum mqtteer_valtype {
+  MQTTEER_TYPE_DOUBLE = 1,
+  MQTTEER_TYPE_LONG = 2,
+  MQTTEER_TYPE_UNSIGNED_LONG = 3,
+  MQTTEER_TYPE_INT = 4,
+  MQTTEER_TYPE_STR = 5,
+};
+
+typedef struct {
+  char *name;
+  union mqtteer_value *value;
+  enum mqtteer_valtype value_type;
+  const char *device_class;
+  const char *unit_of_measurement;
+} mqtteer_report;
+
+typedef struct {
+  int nb;
+  mqtteer_report *reports;
+} mqtteer_reports;
+
+void mqtteer_free_report(mqtteer_report report) {
+  free(report.name);
+  if (report.value_type == MQTTEER_TYPE_STR) {
+    free(report.value->strval);
+  }
+  free(report.value);
+}
+
+void mqtteer_free_reports(mqtteer_reports *reports) {
+  for (int i = 0; i < reports->nb; i++)
+    mqtteer_free_report(reports->reports[i]);
+
+  free(reports->reports);
+  free(reports);
+}
+
+void mqtteer_new_report(mqtteer_reports *reports, char *name,
+                        union mqtteer_value *value,
+                        enum mqtteer_valtype value_type, const char *ha_kind,
+                        const char *unit_of_measurement) {
+  reports->nb++;
+  int new_size = sizeof(mqtteer_report) * reports->nb;
+  reports->reports = rrealloc(reports->reports, new_size);
+  mqtteer_report *report = &reports->reports[reports->nb - 1];
+
+  report->name = strdup(name);
+  report->value = value;
+  report->value_type = value_type;
+  report->device_class = ha_kind;
+  report->unit_of_measurement = unit_of_measurement;
+}
+
+void mqtteer_new_report_dbl(mqtteer_reports *reports, char *name, double value,
+                            const char *ha_kind,
+                            const char *unit_of_measurement) {
+  union mqtteer_value *val = malloc(sizeof(union mqtteer_value));
+  val->dblval = value;
+  mqtteer_new_report(reports, name, val, MQTTEER_TYPE_DOUBLE, ha_kind,
+                     unit_of_measurement);
+}
+
+void mqtteer_new_report_int(mqtteer_reports *reports, char *name, int value,
+                            const char *ha_kind,
+                            const char *unit_of_measurement) {
+  union mqtteer_value *val = malloc(sizeof(union mqtteer_value));
+  val->ival = value;
+  mqtteer_new_report(reports, name, val, MQTTEER_TYPE_INT, ha_kind,
+                     unit_of_measurement);
+}
+
+void mqtteer_new_report_long(mqtteer_reports *reports, char *name, long value,
+                             const char *ha_kind,
+                             const char *unit_of_measurement) {
+  union mqtteer_value *val = malloc(sizeof(union mqtteer_value));
+  val->lval = value;
+  mqtteer_new_report(reports, name, val, MQTTEER_TYPE_LONG, ha_kind,
+                     unit_of_measurement);
+}
+
+void mqtteer_new_report_ulong(mqtteer_reports *reports, char *name,
+                              unsigned long value, const char *ha_kind,
+                              const char *unit_of_measurement) {
+  union mqtteer_value *val = malloc(sizeof(union mqtteer_value));
+  val->ulval = value;
+  mqtteer_new_report(reports, name, val, MQTTEER_TYPE_UNSIGNED_LONG, ha_kind,
+                     unit_of_measurement);
+}
+
+void mqtteer_new_report_str(mqtteer_reports *reports, char *name, char *value,
+                            const char *ha_kind,
+                            const char *unit_of_measurement) {
+  union mqtteer_value *val = malloc(sizeof(union mqtteer_value));
+  val->strval = value;
+  mqtteer_new_report(reports, name, val, MQTTEER_TYPE_STR, ha_kind,
+                     unit_of_measurement);
+}
+
 void mqtteer_send_discovery(char *name, const char *device_class,
                             const char *unit_of_measurement) {
   char unique_id[mqtteer_unique_id_len(name, mqtteer_device_name)];
@@ -251,7 +357,7 @@ char *mqtteer_getenv(char *name) {
 
 struct mqtteer_battery {
   char *name;
-  uint8_t capacity;
+  int capacity;
 };
 
 void mqtteer_free_battery(struct mqtteer_battery *battery) {
@@ -324,7 +430,7 @@ mqtteer_batteries *mqtteer_get_batteries() {
     }
 
     char *endptr;
-    uint8_t capacity = (uint8_t)strtol(buf, &endptr, 10);
+    int capacity = (int)strtol(buf, &endptr, 10);
     if (buf == endptr) {
       fprintf(stderr, "failed to parse battery capacity %s\n",
               power_supply->d_name);
@@ -456,64 +562,90 @@ err_return:
   return -1;
 }
 
-void mqtteer_announce_topics() {
-  int nr_chip = 0, nr_feat = 0;
-  struct mqtteer_sensor *sensor;
-  const struct sensors_chip_name *chip = NULL;
+void mqtteer_announce_topics(mqtteer_reports *reports) {
   if (mqtteer_debug)
     printf("announcing this device\n");
 
   mqtteer_send_discovery(RUNNING_ENTITY_NAME, NULL, NULL);
-  mqtteer_send_discovery("uptime", "duration", "s");
-  mqtteer_send_discovery("load1", "power_factor", NULL);
-  mqtteer_send_discovery("load5", "power_factor", NULL);
-  mqtteer_send_discovery("load15", "power_factor", NULL);
-  mqtteer_send_discovery("used_memory", "data_size", "kB");
-  mqtteer_send_discovery("total_memory", "data_size", "kB");
 
-  // NOTE: PSI could be disabled on the system
-  // in which case these entities would be marked "Unavailable"
-  for (unsigned i = 0; i < NPSI_KINDS; i++) {
-    char name[strlen("psi_memory_some_avg300") + 1]; // longest name
-
-    sprintf(name, "psi_%s_some_avg10", PRESSURE_KINDS[i]);
-    mqtteer_send_discovery(name, "power_factor", "%");
-    sprintf(name, "psi_%s_some_avg60", PRESSURE_KINDS[i]);
-    mqtteer_send_discovery(name, "power_factor", "%");
-    sprintf(name, "psi_%s_some_avg300", PRESSURE_KINDS[i]);
-    mqtteer_send_discovery(name, "power_factor", "%");
-    sprintf(name, "psi_%s_some_total", PRESSURE_KINDS[i]);
-    mqtteer_send_discovery(name, "power_factor", "μs");
-
-    sprintf(name, "psi_%s_full_avg10", PRESSURE_KINDS[i]);
-    mqtteer_send_discovery(name, "power_factor", "%");
-    sprintf(name, "psi_%s_full_avg60", PRESSURE_KINDS[i]);
-    mqtteer_send_discovery(name, "power_factor", "%");
-    sprintf(name, "psi_%s_full_avg300", PRESSURE_KINDS[i]);
-    mqtteer_send_discovery(name, "power_factor", "%");
-    sprintf(name, "psi_%s_full_total", PRESSURE_KINDS[i]);
-    mqtteer_send_discovery(name, "power_factor", "μs");
+  for (int i = 0; i < reports->nb; i++) {
+    mqtteer_report report = reports->reports[i];
+    mqtteer_send_discovery(report.name, report.device_class,
+                           report.unit_of_measurement);
   }
+}
 
-  mqtteer_batteries *batteries = mqtteer_get_batteries();
+void mqtteer_send_metrics(mqtteer_reports *reports) {
+  cJSON *state_obj = cJSON_CreateObject();
+  char state_topic[mqtteer_state_topic_len()];
+  mqtteer_get_state_topic_name(state_topic);
 
-  for (unsigned i = 0; i < batteries->n; i++) {
-    mqtteer_send_discovery(batteries->batteries[i].name, "battery", "%");
-  }
-
-  mqtteer_sensors_init();
-  while ((chip = sensors_get_detected_chips(NULL, &nr_chip)) != NULL) {
-    while ((sensor = mqtteer_get_sensor(chip, &nr_feat)) != NULL) {
-      mqtteer_send_discovery(sensor->name, sensor->device_class, sensor->unit);
-      mqtteer_sensor_free(sensor);
+  cJSON_AddBoolToObject(state_obj, RUNNING_ENTITY_NAME, true);
+  for (int i = 0; i < reports->nb; i++) {
+    mqtteer_report report = reports->reports[i];
+    switch (report.value_type) {
+    case MQTTEER_TYPE_DOUBLE:
+      cJSON_AddNumberToObject(state_obj, report.name, report.value->dblval);
+      break;
+    case MQTTEER_TYPE_LONG:
+      cJSON_AddNumberToObject(state_obj, report.name, report.value->lval);
+      break;
+    case MQTTEER_TYPE_UNSIGNED_LONG:
+      cJSON_AddNumberToObject(state_obj, report.name, report.value->ulval);
+      break;
+    case MQTTEER_TYPE_INT:
+      cJSON_AddNumberToObject(state_obj, report.name, report.value->ival);
+      break;
+    case MQTTEER_TYPE_STR:
+      cJSON_AddStringToObject(state_obj, report.name, report.value->strval);
+      break;
     }
   }
 
-  mqtteer_free_batteries(batteries);
-  sensors_cleanup();
+  char *payload = cJSON_Print(state_obj);
+
+  if (mqtteer_debug)
+    printf("%s\n", payload);
+
+  mqtteer_send(state_topic, payload);
+  free(payload);
+  cJSON_Delete(state_obj);
 }
 
-static void mqtteer_set_psi(const char *kind, cJSON *state_obj) {
+void mqtteer_loadavg_reports(mqtteer_reports *reports) {
+  double av1, av5, av15;
+  procps_loadavg(&av1, &av5, &av15);
+
+  mqtteer_new_report_long(reports, "load1", av1, "power_factor", NULL);
+  mqtteer_new_report_long(reports, "load5", av5, "power_factor", NULL);
+  mqtteer_new_report_long(reports, "load15", av15, "power_factor", NULL);
+}
+
+void mqtteer_uptime_report(mqtteer_reports *reports) {
+  double uptime;
+  procps_uptime(&uptime, NULL);
+
+  mqtteer_new_report_dbl(reports, "uptime", uptime, "duration", "s");
+}
+
+void mqtteer_meminfo_reports(mqtteer_reports *reports) {
+  struct meminfo_info *meminfo = NULL;
+  unsigned long used, total;
+
+  if (procps_meminfo_new(&meminfo) < 0) {
+    fprintf(stderr, "failed to get memory info");
+    exit(EXIT_FAILURE);
+  }
+
+  used = MEMINFO_GET(meminfo, MEMINFO_MEM_USED, ul_int);
+  total = MEMINFO_GET(meminfo, MEMINFO_MEM_TOTAL, ul_int);
+  procps_meminfo_unref(&meminfo);
+
+  mqtteer_new_report_ulong(reports, "used_memory", used, "data_size", "kB");
+  mqtteer_new_report_ulong(reports, "total_memory", total, "data_size", "kB");
+}
+
+void mqtteer_psi_reports(mqtteer_reports *reports, const char *kind) {
   struct mqtteer_psi psi;
   int ret = mqtteer_psi_get(kind, &psi);
   if (ret < 0)
@@ -522,84 +654,68 @@ static void mqtteer_set_psi(const char *kind, cJSON *state_obj) {
   char name[strlen("psi_memory_some_avg300") + 1]; // longest name
 
   sprintf(name, "psi_%s_some_avg10", kind);
-  cJSON_AddNumberToObject(state_obj, name, psi.some.avg10);
+  mqtteer_new_report_dbl(reports, name, psi.some.avg10, "power_factor", "%");
   sprintf(name, "psi_%s_some_avg60", kind);
-  cJSON_AddNumberToObject(state_obj, name, psi.some.avg60);
+  mqtteer_new_report_dbl(reports, name, psi.some.avg60, "power_factor", "%");
   sprintf(name, "psi_%s_some_avg300", kind);
-  cJSON_AddNumberToObject(state_obj, name, psi.some.avg300);
+  mqtteer_new_report_dbl(reports, name, psi.some.avg300, "power_factor", "%");
   sprintf(name, "psi_%s_some_total", kind);
-  cJSON_AddNumberToObject(state_obj, name, psi.some.total);
+  mqtteer_new_report_dbl(reports, name, psi.some.total, "power_factor", "μs");
 
   sprintf(name, "psi_%s_full_avg10", kind);
-  cJSON_AddNumberToObject(state_obj, name, psi.full.avg10);
+  mqtteer_new_report_dbl(reports, name, psi.full.avg10, "power_factor", "%");
   sprintf(name, "psi_%s_full_avg60", kind);
-  cJSON_AddNumberToObject(state_obj, name, psi.full.avg60);
+  mqtteer_new_report_dbl(reports, name, psi.full.avg60, "power_factor", "%");
   sprintf(name, "psi_%s_full_avg300", kind);
-  cJSON_AddNumberToObject(state_obj, name, psi.full.avg300);
+  mqtteer_new_report_dbl(reports, name, psi.full.avg300, "power_factor", "%");
   sprintf(name, "psi_%s_full_total", kind);
-  cJSON_AddNumberToObject(state_obj, name, psi.full.total);
+  mqtteer_new_report_dbl(reports, name, psi.full.total, "power_factor", "μs");
 }
 
-void mqtteer_report_metrics() {
-  struct meminfo_info *meminfo = NULL;
-  double uptime;
-  double av1, av5, av15;
-  unsigned long used, total;
-  char state_topic[mqtteer_state_topic_len()];
+void mqtteer_sensors_reports(mqtteer_reports *reports) {
   int nr_chip = 0, nr_feat = 0;
   const struct sensors_chip_name *chip = NULL;
   struct mqtteer_sensor *sensor;
-
-  procps_loadavg(&av1, &av5, &av15);
-  procps_uptime(&uptime, NULL);
-
-  if (procps_meminfo_new(&meminfo) < 0) {
-    fprintf(stderr, "failed to get memory info");
-    exit(EXIT_FAILURE);
-  }
-  used = MEMINFO_GET(meminfo, MEMINFO_MEM_USED, ul_int);
-  total = MEMINFO_GET(meminfo, MEMINFO_MEM_TOTAL, ul_int);
-  procps_meminfo_unref(&meminfo);
-
-  cJSON *state_obj = cJSON_CreateObject();
-  cJSON_AddBoolToObject(state_obj, RUNNING_ENTITY_NAME, true);
-  cJSON_AddNumberToObject(state_obj, "uptime", uptime);
-  cJSON_AddNumberToObject(state_obj, "load1", av1);
-  cJSON_AddNumberToObject(state_obj, "load5", av5);
-  cJSON_AddNumberToObject(state_obj, "load15", av15);
-  cJSON_AddNumberToObject(state_obj, "used_memory", used);
-  cJSON_AddNumberToObject(state_obj, "total_memory", total);
-
-  for (unsigned i = 0; i < NPSI_KINDS; i++)
-    mqtteer_set_psi(PRESSURE_KINDS[i], state_obj);
-
-  mqtteer_batteries *batteries = mqtteer_get_batteries();
-
-  for (unsigned i = 0; i < batteries->n; i++) {
-    cJSON_AddNumberToObject(state_obj, batteries->batteries[i].name,
-                            batteries->batteries[i].capacity);
-  }
 
   mqtteer_sensors_init();
 
   while ((chip = sensors_get_detected_chips(NULL, &nr_chip)) != NULL) {
     while ((sensor = mqtteer_get_sensor(chip, &nr_feat)) != NULL) {
-      cJSON_AddNumberToObject(state_obj, sensor->name, sensor->value);
+      mqtteer_new_report_dbl(reports, sensor->name, sensor->value, sensor->unit,
+                             sensor->unit);
       mqtteer_sensor_free(sensor);
     }
   }
   sensors_cleanup();
+}
 
-  char *payload = cJSON_Print(state_obj);
+void mqtteer_batteries_reports(mqtteer_reports *reports) {
+  mqtteer_batteries *batteries = mqtteer_get_batteries();
 
-  if (mqtteer_debug)
-    printf("%s\n", payload);
+  for (unsigned i = 0; i < batteries->n; i++) {
+    mqtteer_new_report_int(reports, batteries->batteries[i].name,
+                           batteries->batteries[i].capacity, "battery", "%");
+  }
 
   mqtteer_free_batteries(batteries);
-  mqtteer_get_state_topic_name(state_topic);
-  mqtteer_send(state_topic, payload);
-  free(payload);
-  cJSON_Delete(state_obj);
+}
+
+mqtteer_reports *mqtteer_get_reports() {
+  mqtteer_reports *reports = malloc(sizeof(mqtteer_reports));
+  reports->nb = 0;
+  reports->reports = NULL;
+
+  mqtteer_loadavg_reports(reports);
+  mqtteer_uptime_report(reports);
+  mqtteer_meminfo_reports(reports);
+
+  mqtteer_sensors_reports(reports);
+  mqtteer_batteries_reports(reports);
+
+  for (unsigned i = 0; i < NPSI_KINDS; i++)
+    mqtteer_psi_reports(reports, PRESSURE_KINDS[i]);
+
+  return reports;
 }
 
 void mqtteer_set_will() {
@@ -641,15 +757,16 @@ static void mqtteer_init_mosquitto() {
   mosquitto_username_pw_set(mosq, mosq_username, mosq_password);
   mqtteer_set_will();
   mosquitto_connect(mosq, mosq_host, mosq_port, MOSQ_KEEPALIVE);
-
 }
 
 int main(void) {
   mqtteer_init_mosquitto();
 
   while (true) {
-    mqtteer_announce_topics();
-    mqtteer_report_metrics();
+    mqtteer_reports *reports = mqtteer_get_reports();
+    mqtteer_announce_topics(reports);
+    mqtteer_send_metrics(reports);
+    mqtteer_free_reports(reports);
     sleep(60);
   }
 
