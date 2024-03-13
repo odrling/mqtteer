@@ -616,9 +616,9 @@ void mqtteer_loadavg_reports(mqtteer_reports *reports) {
   double av1, av5, av15;
   procps_loadavg(&av1, &av5, &av15);
 
-  mqtteer_new_report_long(reports, "load1", av1, "power_factor", NULL);
-  mqtteer_new_report_long(reports, "load5", av5, "power_factor", NULL);
-  mqtteer_new_report_long(reports, "load15", av15, "power_factor", NULL);
+  mqtteer_new_report_dbl(reports, "load1", av1, "power_factor", NULL);
+  mqtteer_new_report_dbl(reports, "load5", av5, "power_factor", NULL);
+  mqtteer_new_report_dbl(reports, "load15", av15, "power_factor", NULL);
 }
 
 void mqtteer_uptime_report(mqtteer_reports *reports) {
