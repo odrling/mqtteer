@@ -681,8 +681,8 @@ void mqtteer_sensors_reports(mqtteer_reports *reports) {
 
   while ((chip = sensors_get_detected_chips(NULL, &nr_chip)) != NULL) {
     while ((sensor = mqtteer_get_sensor(chip, &nr_feat)) != NULL) {
-      mqtteer_new_report_dbl(reports, sensor->name, sensor->value, sensor->unit,
-                             sensor->unit);
+      mqtteer_new_report_dbl(reports, sensor->name, sensor->value,
+                             sensor->device_class, sensor->unit);
       mqtteer_sensor_free(sensor);
     }
   }
