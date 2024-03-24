@@ -80,7 +80,7 @@ void mqtteer_send(char *topic, char *payload) {
   }
 }
 
-int mqtteer_state_topic_len() {
+int mqtteer_state_topic_len(void) {
   return strlen(mqtteer_device_name) +
          strlen(DISCOVERY_TOPIC_PREFIX "/sensor//state") + 1;
 }
@@ -278,7 +278,7 @@ void mqtteer_sensor_free(struct mqtteer_sensor *sensor) {
   free(sensor);
 }
 
-void mqtteer_sensors_init() {
+void mqtteer_sensors_init(void) {
   int ret;
 
   ret = sensors_init(NULL);
@@ -378,7 +378,7 @@ void mqtteer_free_batteries(mqtteer_batteries *batteries) {
 
 #define POWER_SUPPLY_DIR "/sys/class/power_supply"
 #define BATTERY_CAPACITY_NAME "capacity"
-mqtteer_batteries *mqtteer_get_batteries() {
+mqtteer_batteries *mqtteer_get_batteries(void) {
   struct dirent *power_supply;
   DIR *power_supplies_dir = opendir(POWER_SUPPLY_DIR);
   if (power_supplies_dir == NULL)
@@ -700,7 +700,7 @@ void mqtteer_batteries_reports(mqtteer_reports *reports) {
   mqtteer_free_batteries(batteries);
 }
 
-mqtteer_reports *mqtteer_get_reports() {
+mqtteer_reports *mqtteer_get_reports(void) {
   mqtteer_reports *reports = malloc(sizeof(mqtteer_reports));
   reports->nb = 0;
   reports->reports = NULL;
@@ -718,7 +718,7 @@ mqtteer_reports *mqtteer_get_reports() {
   return reports;
 }
 
-void mqtteer_set_will() {
+void mqtteer_set_will(void) {
   char payload[] = "{\"" RUNNING_ENTITY_NAME "\":false}";
   int payload_len = strlen(payload);
 
@@ -728,7 +728,7 @@ void mqtteer_set_will() {
   mosquitto_will_set(mosq, state_topic, payload_len, payload, 0, false);
 }
 
-static void mqtteer_init_mosquitto() {
+static void mqtteer_init_mosquitto(void) {
   int mosq_port;
 
   char *mosq_username = mqtteer_getenv("MQTTEER_USERNAME");
