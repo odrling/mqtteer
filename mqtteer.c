@@ -346,7 +346,7 @@ struct mqtteer_sensor *mqtteer_get_sensor(const struct sensors_chip_name *chip,
   return NULL;
 }
 
-char *mqtteer_getenv(char *name) {
+char *mqtteer_getenv(const char *name) {
   char *value = getenv(name);
   if (value == NULL) {
     fprintf(stderr, "%s environment variable is not set", name);
