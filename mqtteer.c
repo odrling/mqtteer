@@ -50,7 +50,7 @@ static inline void cclosedir(DIR *dir) {
   }
 }
 
-static inline void *mmalloc(int len) {
+static inline void *mmalloc(size_t len) {
   void *ptr = malloc(len);
   if (ptr == NULL) {
     perror("malloc failed");
@@ -59,7 +59,7 @@ static inline void *mmalloc(int len) {
   return ptr;
 }
 
-static inline void *rrealloc(void *ptr, int len) {
+static inline void *rrealloc(void *ptr, size_t len) {
   void *out_ptr = realloc(ptr, len);
   if (out_ptr == NULL) {
     perror("realloc failed");
@@ -68,19 +68,26 @@ static inline void *rrealloc(void *ptr, int len) {
   return out_ptr;
 }
 
-void mqtteer_send(char *topic, char *payload) {
-  int payload_len;
-  int ret;
+static void mqtteer_ensure_payload_len_conversion(size_t payload_len) {
+  // ensure correct int conversion for mosquitto payloads
+  if (payload_len > INT_MAX) {
+    fprintf(stderr, "will payload len is too long");
+    exit(EXIT_FAILURE);
+  }
+}
 
-  payload_len = strlen(payload);
-  ret = mosquitto_publish(mosq, NULL, topic, payload_len, payload, 0, false);
+void mqtteer_send(char *topic, char *payload) {
+  size_t payload_len = strlen(payload);
+  mqtteer_ensure_payload_len_conversion(payload_len);
+
+  int ret = mosquitto_publish(mosq, NULL, topic, (int) payload_len, payload, 0, false);
   if (ret != MOSQ_ERR_SUCCESS) {
     fprintf(stderr, "error %d", ret);
     exit(EXIT_FAILURE);
   }
 }
 
-int mqtteer_state_topic_len(void) {
+size_t mqtteer_state_topic_len(void) {
   return strlen(mqtteer_device_name) +
          strlen(DISCOVERY_TOPIC_PREFIX "/sensor//state") + 1;
 }
@@ -90,7 +97,7 @@ void mqtteer_get_state_topic_name(char *state_topic) {
           mqtteer_device_name);
 }
 
-int mqtteer_discovery_topic_len(char *name) {
+size_t mqtteer_discovery_topic_len(char *name) {
   return strlen(name) + strlen(mqtteer_device_name) +
          strlen(DISCOVERY_TOPIC_PREFIX "/sensor///config") + 1;
 }
@@ -100,7 +107,7 @@ void mqtteer_get_discovery_topic_name(char *state_topic, char *name) {
           mqtteer_device_name, name);
 }
 
-int mqtteer_unique_id_len(char *name, char *device_name) {
+size_t mqtteer_unique_id_len(char *name, char *device_name) {
   return strlen(name) + strlen(device_name) + 2;
 }
 
@@ -111,7 +118,7 @@ void mqtteer_get_unique_id(char *unique_id, char *name, char *device_name) {
 union mqtteer_value {
   double dblval;
   long lval;
-  unsigned ulval;
+  unsigned long ulval;
   int ival;
   char *strval;
 };
@@ -126,15 +133,15 @@ enum mqtteer_valtype {
 
 typedef struct {
   char *name;
-  union mqtteer_value *value;
-  enum mqtteer_valtype value_type;
   const char *device_class;
   const char *unit_of_measurement;
+  union mqtteer_value *value;
+  enum mqtteer_valtype value_type;
 } mqtteer_report;
 
 typedef struct {
-  int nb;
   mqtteer_report *reports;
+  unsigned int nb;
 } mqtteer_reports;
 
 void mqtteer_free_report(mqtteer_report report) {
@@ -146,7 +153,7 @@ void mqtteer_free_report(mqtteer_report report) {
 }
 
 void mqtteer_free_reports(mqtteer_reports *reports) {
-  for (int i = 0; i < reports->nb; i++)
+  for (unsigned int i = 0; i < reports->nb; i++)
     mqtteer_free_report(reports->reports[i]);
 
   free(reports->reports);
@@ -158,7 +165,7 @@ void mqtteer_new_report(mqtteer_reports *reports, char *name,
                         enum mqtteer_valtype value_type, const char *ha_kind,
                         const char *unit_of_measurement) {
   reports->nb++;
-  int new_size = sizeof(mqtteer_report) * reports->nb;
+  size_t new_size = sizeof(mqtteer_report) * reports->nb;
   reports->reports = rrealloc(reports->reports, new_size);
   mqtteer_report *report = &reports->reports[reports->nb - 1];
 
@@ -289,7 +296,7 @@ void mqtteer_sensors_init(void) {
 }
 
 char *mqtteer_sensor_get_name(char *chip_name, char *label) {
-  int len = strlen(chip_name) + strlen(label) + 2;
+  size_t len = strlen(chip_name) + strlen(label) + 4;
   char *name = mmalloc(len);
 
   snprintf(name, len, "%s_%s", chip_name, label);
@@ -334,7 +341,7 @@ struct mqtteer_sensor *mqtteer_get_sensor(const struct sensors_chip_name *chip,
       break;
     default:
       if (mqtteer_debug)
-        fprintf(stderr, "%s: unsupported feature type: %d\n", sensor_name,
+        fprintf(stderr, "%s: unsupported feature type: %u\n", sensor_name,
                 feature->type);
     }
 
@@ -366,8 +373,8 @@ void mqtteer_free_battery(struct mqtteer_battery *battery) {
 }
 
 typedef struct {
-  unsigned n;
   struct mqtteer_battery *batteries;
+  unsigned n;
 } mqtteer_batteries;
 
 void mqtteer_free_batteries(mqtteer_batteries *batteries) {
@@ -568,7 +575,7 @@ void mqtteer_announce_topics(mqtteer_reports *reports) {
 
   mqtteer_send_discovery(RUNNING_ENTITY_NAME, NULL, NULL);
 
-  for (int i = 0; i < reports->nb; i++) {
+  for (unsigned int i = 0; i < reports->nb; i++) {
     mqtteer_report report = reports->reports[i];
     mqtteer_send_discovery(report.name, report.device_class,
                            report.unit_of_measurement);
@@ -581,7 +588,7 @@ void mqtteer_send_metrics(mqtteer_reports *reports) {
   mqtteer_get_state_topic_name(state_topic);
 
   cJSON_AddBoolToObject(state_obj, RUNNING_ENTITY_NAME, true);
-  for (int i = 0; i < reports->nb; i++) {
+  for (unsigned int i = 0; i < reports->nb; i++) {
     mqtteer_report report = reports->reports[i];
     switch (report.value_type) {
     case MQTTEER_TYPE_DOUBLE:
@@ -660,7 +667,7 @@ void mqtteer_psi_reports(mqtteer_reports *reports, const char *kind) {
   sprintf(name, "psi_%s_some_avg300", kind);
   mqtteer_new_report_dbl(reports, name, psi.some.avg300, "power_factor", "%");
   sprintf(name, "psi_%s_some_total", kind);
-  mqtteer_new_report_dbl(reports, name, psi.some.total, "power_factor", "μs");
+  mqtteer_new_report_long(reports, name, psi.some.total, "power_factor", "μs");
 
   sprintf(name, "psi_%s_full_avg10", kind);
   mqtteer_new_report_dbl(reports, name, psi.full.avg10, "power_factor", "%");
@@ -669,7 +676,7 @@ void mqtteer_psi_reports(mqtteer_reports *reports, const char *kind) {
   sprintf(name, "psi_%s_full_avg300", kind);
   mqtteer_new_report_dbl(reports, name, psi.full.avg300, "power_factor", "%");
   sprintf(name, "psi_%s_full_total", kind);
-  mqtteer_new_report_dbl(reports, name, psi.full.total, "power_factor", "μs");
+  mqtteer_new_report_long(reports, name, psi.full.total, "power_factor", "μs");
 }
 
 void mqtteer_sensors_reports(mqtteer_reports *reports) {
@@ -720,12 +727,13 @@ mqtteer_reports *mqtteer_get_reports(void) {
 
 void mqtteer_set_will(void) {
   char payload[] = "{\"" RUNNING_ENTITY_NAME "\":false}";
-  int payload_len = strlen(payload);
+  size_t payload_len = strlen(payload);
+  mqtteer_ensure_payload_len_conversion(payload_len);
 
   char state_topic[mqtteer_state_topic_len()];
   mqtteer_get_state_topic_name(state_topic);
 
-  mosquitto_will_set(mosq, state_topic, payload_len, payload, 0, false);
+  mosquitto_will_set(mosq, state_topic, (int) payload_len, payload, 0, false);
 }
 
 static void mqtteer_init_mosquitto(void) {
@@ -742,11 +750,16 @@ static void mqtteer_init_mosquitto(void) {
   if (mosq_port_str == NULL)
     mosq_port = 1883;
   else {
-    mosq_port = strtol(mosq_port_str, &port_endptr, 10);
-    if (mosq_port_str == port_endptr || mosq_port == 0) {
+    long l_mosq_port = strtol(mosq_port_str, &port_endptr, 10);
+    if (l_mosq_port > INT_MAX) {
+      fprintf(stderr, "MQTTEER_PORT is too large: %s", mosq_port_str);
+      exit(EXIT_FAILURE);
+    }
+    if (mosq_port_str == port_endptr || l_mosq_port <= 0) {
       fprintf(stderr, "MQTTEER_PORT is invalid: %s", mosq_port_str);
       exit(EXIT_FAILURE);
     }
+    mosq_port = (int) l_mosq_port;
   }
 
   mqtteer_device_name = mqtteer_getenv("MQTTEER_DEVICE_NAME");
