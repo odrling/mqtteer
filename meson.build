@@ -1,5 +1,9 @@
-project('mqtteer', 'c', version: '2.2.10', 
-        default_options: ['warning_level=2', 'werror=true', 'c_std=gnu17'])
+project(
+    'mqtteer',
+    'c',
+    version: '2.2.10',
+    default_options: ['warning_level=2', 'werror=true', 'c_std=gnu17'],
+)
 
 mosquitto = dependency('libmosquitto')
 proc2 = dependency('libproc2')
