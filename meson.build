@@ -1,7 +1,7 @@
 project(
     'mqtteer',
     'c',
-    version: '2.2.10',
+    version: '2.2.11',
     license: 'MIT',
     default_options: ['warning_level=2', 'werror=true', 'c_std=gnu17'],
 )
