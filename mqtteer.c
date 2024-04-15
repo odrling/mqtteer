@@ -92,9 +92,18 @@ size_t mqtteer_state_topic_len(void) {
          strlen(DISCOVERY_TOPIC_PREFIX "/sensor//state") + 1;
 }
 
-void mqtteer_get_state_topic_name(char *state_topic) {
-  sprintf(state_topic, DISCOVERY_TOPIC_PREFIX "/sensor/%s/state",
-          mqtteer_device_name);
+static void mqtteer_remove_illegal_topic_chars(char *topic, size_t len) {
+  // replace space characters
+  for (unsigned ui = 0; ui < len; ui++) {
+    if (topic[ui] == ' ')
+      topic[ui] = '_';
+  }
+}
+
+void mqtteer_get_state_topic_name(char *state_topic, size_t len) {
+  snprintf(state_topic, len, DISCOVERY_TOPIC_PREFIX "/sensor/%s/state",
+           mqtteer_device_name);
+  mqtteer_remove_illegal_topic_chars(state_topic, len);
 }
 
 size_t mqtteer_discovery_topic_len(char *name) {
@@ -102,9 +111,11 @@ size_t mqtteer_discovery_topic_len(char *name) {
          strlen(DISCOVERY_TOPIC_PREFIX "/sensor///config") + 1;
 }
 
-void mqtteer_get_discovery_topic_name(char *state_topic, char *name) {
-  sprintf(state_topic, DISCOVERY_TOPIC_PREFIX "/sensor/%s/%s/config",
-          mqtteer_device_name, name);
+void mqtteer_get_discovery_topic_name(char *discovery_topic, char *name,
+                                      size_t len) {
+  snprintf(discovery_topic, len, DISCOVERY_TOPIC_PREFIX "/sensor/%s/%s/config",
+           mqtteer_device_name, name);
+  mqtteer_remove_illegal_topic_chars(discovery_topic, len);
 }
 
 size_t mqtteer_unique_id_len(char *name, char *device_name) {
@@ -223,13 +234,15 @@ void mqtteer_new_report_str(mqtteer_reports *reports, char *name, char *value,
 
 void mqtteer_send_discovery(char *name, const char *device_class,
                             const char *unit_of_measurement) {
+  size_t topic_len = mqtteer_state_topic_len();
   char unique_id[mqtteer_unique_id_len(name, mqtteer_device_name)];
   mqtteer_get_unique_id(unique_id, name, mqtteer_device_name);
-  char state_topic[mqtteer_state_topic_len()];
-  mqtteer_get_state_topic_name(state_topic);
+  char state_topic[topic_len];
+  mqtteer_get_state_topic_name(state_topic, topic_len);
 
-  char discovery_topic[mqtteer_discovery_topic_len(name)];
-  mqtteer_get_discovery_topic_name(discovery_topic, name);
+  size_t discovery_topic_len = mqtteer_discovery_topic_len(name);
+  char discovery_topic[discovery_topic_len];
+  mqtteer_get_discovery_topic_name(discovery_topic, name, discovery_topic_len);
 
   cJSON *discovery_obj = cJSON_CreateObject();
 
@@ -584,8 +597,9 @@ void mqtteer_announce_topics(mqtteer_reports *reports) {
 
 void mqtteer_send_metrics(mqtteer_reports *reports) {
   cJSON *state_obj = cJSON_CreateObject();
-  char state_topic[mqtteer_state_topic_len()];
-  mqtteer_get_state_topic_name(state_topic);
+  size_t topic_len = mqtteer_state_topic_len();
+  char state_topic[topic_len];
+  mqtteer_get_state_topic_name(state_topic, topic_len);
 
   cJSON_AddBoolToObject(state_obj, RUNNING_ENTITY_NAME, true);
   for (unsigned int i = 0; i < reports->nb; i++) {
@@ -730,8 +744,9 @@ void mqtteer_set_will(void) {
   size_t payload_len = strlen(payload);
   mqtteer_ensure_payload_len_conversion(payload_len);
 
-  char state_topic[mqtteer_state_topic_len()];
-  mqtteer_get_state_topic_name(state_topic);
+  size_t topic_len = mqtteer_state_topic_len();
+  char state_topic[topic_len];
+  mqtteer_get_state_topic_name(state_topic, topic_len);
 
   mosquitto_will_set(mosq, state_topic, (int) payload_len, payload, 0, false);
 }
